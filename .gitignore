@@ -1,0 +1,18 @@
+# Ambiente virtual Python (nunca subir para o GitHub)
+venv/
+.venv/
+env/
+
+# Arquivos de ambiente com chaves de API
+.env
+backend/.env
+
+# Cache do Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Arquivos temporários e uploads
+*.log
+.DS_Store
+Thumbs.db
