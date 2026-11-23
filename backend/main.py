@@ -136,6 +136,10 @@ if os.path.exists(static_path):
     async def serve_index():
         return FileResponse(os.path.join(static_path, "index.html"))
 
+    @app.get("/favicon.ico", include_in_schema=False)
+    async def serve_favicon():
+        return FileResponse(os.path.join(static_path, "favicon.ico"))
+
 # Se o frontend Vite estiver compilado em frontend/dist, disponibiliza como alternativa
 dist_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "frontend", "dist")
 if os.path.exists(dist_path):
