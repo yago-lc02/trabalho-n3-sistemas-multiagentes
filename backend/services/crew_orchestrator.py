@@ -189,21 +189,27 @@ def run_study_crew(
         verbose=True
     )
 
-    crew_output = crew.kickoff()
-    raw_result_str = str(crew_output)
-    
-    # Processa e consolida o JSON
-    try:
-        parsed_result = clean_json_output(raw_result_str)
-    except Exception as e:
-        logger.warning(f"Erro ao parsear saída final global da Crew: {e}. Coletando saídas individuais das tarefas...")
-        parsed_result = {}
-        for task in [tarefa_sintese, tarefa_simulado, tarefa_cronograma]:
-            try:
-                task_json = clean_json_output(str(task.output))
-                parsed_result.update(task_json)
-            except Exception as task_err:
-                logger.error(f"Erro ao extrair JSON da tarefa individual: {task_err}")
+    crew.kickoff()
+
+    # A saída final da Crew contém só a última tarefa (cronograma).
+    # Por isso consolidamos o JSON de cada uma das 3 tarefas individualmente.
+    # O LLM às vezes omite a chave raiz ('resumo', 'simulado', 'cronograma'):
+    # nesse caso o JSON inteiro é encaixado na chave esperada da tarefa.
+    parsed_result = {}
+    for chave, task in (("resumo", tarefa_sintese), ("simulado", tarefa_simulado), ("cronograma", tarefa_cronograma)):
+        raw = getattr(task.output, "raw", None) or str(task.output)
+        try:
+            task_json = clean_json_output(raw)
+            if isinstance(task_json, dict) and chave in task_json:
+                parsed_result[chave] = task_json[chave]
+            elif isinstance(task_json, dict) and task_json:
+                parsed_result[chave] = task_json
+        except Exception as task_err:
+            logger.error(f"Erro ao extrair JSON da tarefa '{chave}': {task_err}")
+
+    for chave in ("resumo", "simulado", "cronograma"):
+        if chave not in parsed_result:
+            logger.warning(f"Chave '{chave}' ausente na saída dos agentes; usando dados de demonstração.")
 
     # Garante estrutura padronizada
     final_output = {
