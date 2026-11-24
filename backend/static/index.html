@@ -10,15 +10,13 @@
   <link rel="icon" type="image/x-icon" href="/favicon.ico">
   <link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
 
-  <!-- Font Inter -->
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-
-  <!-- Tailwind CSS via CDN para execução garantida sem dependência de build de pacotes -->
-  <script src="https://cdn.tailwindcss.com"></script>
-  <!-- Geração do arquivo PDF para download -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+  <!-- Arquivos salvos no próprio projeto (static/vendor) para o sistema funcionar sem internet -->
+  <!-- Fonte Inter -->
+  <link href="/static/vendor/inter.css" rel="stylesheet">
+  <!-- Tailwind CSS 3.4.17 (sem dependência de build de pacotes) -->
+  <script src="/static/vendor/tailwind.js"></script>
+  <!-- html2pdf.js 0.10.1: geração do arquivo PDF para download -->
+  <script src="/static/vendor/html2pdf.bundle.min.js"></script>
   <script>
     tailwind.config = {
       theme: {
