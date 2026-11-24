@@ -44,9 +44,26 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-def _erro_http(e: Exception, prefixo: str = "") -> HTTPException:
+def _erro_http(e: Exception, prefixo: str = "", provider: Optional[str] = None) -> HTTPException:
     """Converte erros do LLM em respostas claras para o usuário."""
     msg = str(e)
+    if (provider or "").lower() == "ollama":
+        base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+        modelo = os.getenv("OLLAMA_MODEL", "llama3.2")
+        # O Ollama é acessado pelo formato de API da OpenAI, por isso a biblioteca
+        # fala em "OpenAI API" quando não encontra o Ollama rodando.
+        if "connect" in msg.lower() or "connection" in msg.lower() or "refused" in msg.lower():
+            return HTTPException(
+                status_code=503,
+                detail=f"O Ollama não está rodando em {base_url}. Instale o Ollama (ollama.com), "
+                       f"execute 'ollama pull {modelo}' no terminal e tente novamente."
+            )
+        if "not found" in msg.lower() and "model" in msg.lower():
+            return HTTPException(
+                status_code=503,
+                detail=f"O modelo '{modelo}' não foi baixado no Ollama. "
+                       f"Execute 'ollama pull {modelo}' no terminal e tente novamente."
+            )
     if "429" in msg or "RESOURCE_EXHAUSTED" in msg or "quota" in msg.lower() or "rate limit" in msg.lower():
         return HTTPException(
             status_code=429,
@@ -114,7 +131,7 @@ async def processar_texto(payload: StudyTextRequest):
         return resultado
     except Exception as e:
         logger.error(f"Erro ao processar texto com CrewAI: {e}", exc_info=True)
-        raise _erro_http(e)
+        raise _erro_http(e, provider=payload.provider or os.getenv("LLM_PROVIDER", "demo"))
 
 @app.post("/api/processar-pdf")
 async def processar_pdf(
@@ -152,7 +169,7 @@ async def processar_pdf(
         raise
     except Exception as e:
         logger.error(f"Erro ao processar PDF: {e}", exc_info=True)
-        raise _erro_http(e, "Erro interno ao processar material: ")
+        raise _erro_http(e, "Erro interno ao processar material: ", provider or os.getenv("LLM_PROVIDER", "demo"))
 
 # Monta diretório estático do frontend
 static_path = os.path.join(os.path.dirname(__file__), "static")

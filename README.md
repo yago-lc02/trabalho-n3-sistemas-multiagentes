@@ -121,8 +121,14 @@ O sistema conta com um **seletor no topo da tela** permitindo alternar de forma 
    - Totalmente independente de internet.
    - Conecta ao serviço local do Ollama em `http://localhost:11434` (usando por exemplo `ollama run llama3.2` ou `qwen2.5:3b`).
    - Garante privacidade e imunidade a oscilações da rede Wi-Fi do auditório.
+   - Como ativar:
+     1. Instale o Ollama para Windows pelo site [ollama.com](https://ollama.com). Ele fica rodando em segundo plano na porta `11434`.
+     2. Baixe o modelo usado pelo projeto: `ollama pull llama3.2`.
+     3. No app, escolha **Ollama Local / Offline** no seletor do topo. Não é preciso reiniciar o servidor.
+   - Para usar outro modelo (ex.: `qwen2.5:7b`, melhor em português, mas exige uns 16 GB de RAM), baixe-o com `ollama pull` e ajuste `OLLAMA_MODEL` no `backend/.env`.
+   - Roda inteiramente no computador, então é bem mais lento que o Gemini (pode levar alguns minutos sem placa de vídeo), e modelos pequenos às vezes devolvem respostas fora do formato esperado.
 
-3. **Modo Nuvem (Google Gemini ou OpenAI):**
+3. **Modo Nuvem (Google Gemini):**
    - Utiliza as APIs oficiais via chave configurada no `.env`.
    - Gera materiais ricos e aprofundados com alta fidelidade ao material didático anexado.
 
