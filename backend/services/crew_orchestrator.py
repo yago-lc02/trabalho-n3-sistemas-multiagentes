@@ -2,6 +2,7 @@ import json
 import logging
 import os
 import threading
+from concurrent.futures import ThreadPoolExecutor
 from typing import Dict, Any, Callable, Optional
 from backend.services.demo_data import DEMO_DATA
 from backend.services.llm_factory import get_llm_instance
@@ -54,10 +55,10 @@ def run_study_crew(
     progress_callback: Optional[Callable[[int, str], None]] = None
 ) -> Dict[str, Any]:
     """
-    Executa o fluxo multiagente sequencial com 3 agentes especializados:
-    1. Agente 1 - Sintetizador Acadêmico
-    2. Agente 2 - Elaborador de Banca Examinadora
-    3. Agente 3 - Tutor de Revisão Espaçada
+    Executa o fluxo multiagente com 3 agentes especializados:
+    1. Agente 1 - Sintetizador Acadêmico (roda primeiro)
+    2. Agente 2 - Elaborador de Banca Examinadora (em paralelo com o 3)
+    3. Agente 3 - Tutor de Revisão Espaçada (em paralelo com o 2)
     """
     # O simulado tem entre 5 e 10 questões objetivas
     num_questoes = max(5, min(10, int(num_questoes or 5)))
@@ -204,20 +205,35 @@ def run_study_crew(
     # Limite de chamadas por minuto ao LLM (plano gratuito do Gemini: 5/min)
     max_rpm = int(os.getenv("LLM_MAX_RPM", "4")) if provider.lower() == "gemini" else None
 
-    # Execução sequencial da Crew
-    crew = Crew(
-        agents=[agente_sintetizador, agente_banca, agente_tutor],
-        tasks=[tarefa_sintese, tarefa_simulado, tarefa_cronograma],
-        process=Process.sequential,
-        max_rpm=max_rpm,
-        verbose=True
-    )
+    # A Banca e o Tutor dependem só do resumo do Sintetizador, não um do outro.
+    # Por isso cada um recebe apenas o resumo como contexto e os dois rodam ao
+    # mesmo tempo, depois que o resumo fica pronto.
+    tarefa_simulado.context = [tarefa_sintese]
+    tarefa_cronograma.context = [tarefa_sintese]
+
+    def nova_crew(agente, tarefa):
+        return Crew(
+            agents=[agente],
+            tasks=[tarefa],
+            process=Process.sequential,
+            max_rpm=max_rpm,
+            verbose=True
+        )
 
     with _crew_lock:
-        crew.kickoff()
+        # Etapa 1: Sintetizador gera o resumo
+        nova_crew(agente_sintetizador, tarefa_sintese).kickoff()
 
-    # A saída final da Crew contém só a última tarefa (cronograma).
-    # Por isso consolidamos o JSON de cada uma das 3 tarefas individualmente.
+        # Etapa 2: Banca (simulado) e Tutor (cronograma) em paralelo
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            futuros = [
+                executor.submit(nova_crew(agente_banca, tarefa_simulado).kickoff),
+                executor.submit(nova_crew(agente_tutor, tarefa_cronograma).kickoff),
+            ]
+            for futuro in futuros:
+                futuro.result()
+
+    # Consolidamos o JSON de cada uma das 3 tarefas individualmente.
     # O LLM às vezes omite a chave raiz ('resumo', 'simulado', 'cronograma'):
     # nesse caso o JSON inteiro é encaixado na chave esperada da tarefa.
     parsed_result = {}
