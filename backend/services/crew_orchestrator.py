@@ -1,6 +1,8 @@
 import json
 import logging
 import os
+import random
+import re
 import threading
 from concurrent.futures import ThreadPoolExecutor
 from typing import Dict, Any, Callable, Optional
@@ -63,6 +65,51 @@ def _normalizar_formato(chave: str, valor: Any) -> Optional[Dict[str, Any]]:
     if chave == "resumo" and isinstance(valor, list):
         return {"titulo": "", "visao_geral": "", "topicos": valor}
     return valor if isinstance(valor, dict) else None
+
+
+# Referências a letras dentro da explicação: "alternativa B", "letra C", "(D)", "A)"
+_REF_LETRA = re.compile(
+    r"(?P<pre>\b(?i:alternativas?|letras?|op[çc][ãa]o|op[çc][õo]es|item|itens)\s+)(?P<l>[A-D])\b"
+    r"|\((?P<l2>[A-D])\)"
+    r"|\b(?P<l3>[A-D])\)"
+)
+
+
+def _embaralhar_alternativas(questao: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Embaralha a ordem das alternativas e atualiza a resposta correta.
+    Modelos de linguagem tendem a colocar a resposta certa sempre na mesma
+    letra (geralmente A); embaralhar no servidor resolve isso para qualquer modelo.
+    """
+    alternativas = questao.get("alternativas")
+    correta = str(questao.get("resposta_correta") or "").strip().upper()[:1]
+    if not isinstance(alternativas, dict) or correta not in alternativas:
+        return questao
+    letras_antigas = list(alternativas.keys())
+    nova_ordem = letras_antigas[:]
+    random.shuffle(nova_ordem)
+    letras_novas = [chr(ord("A") + i) for i in range(len(nova_ordem))]
+    # letra antiga -> letra nova
+    mapa = {antiga: nova for antiga, nova in zip(nova_ordem, letras_novas)}
+
+    questao["alternativas"] = {mapa[antiga]: alternativas[antiga] for antiga in nova_ordem}
+    questao["alternativas"] = dict(sorted(questao["alternativas"].items()))
+    questao["resposta_correta"] = mapa[correta]
+
+    # Atualiza as letras citadas na explicação para a nova ordem
+    def trocar(m):
+        if m.group("l"):
+            antiga = m.group("l").upper()
+            return m.group("pre") + mapa.get(antiga, antiga)
+        if m.group("l2"):
+            antiga = m.group("l2").upper()
+            return "(" + mapa.get(antiga, antiga) + ")"
+        antiga = m.group("l3").upper()
+        return mapa.get(antiga, antiga) + ")"
+
+    if isinstance(questao.get("explicacao"), str):
+        questao["explicacao"] = _REF_LETRA.sub(trocar, questao["explicacao"])
+    return questao
 
 
 def run_study_crew(
@@ -161,7 +208,7 @@ def run_study_crew(
     tarefa_simulado = Task(
         description=(
             "Com base no resumo estruturado gerado pelo Agente 1, elabore um simulado inédito contendo:\n"
-            f"- EXATAMENTE {num_questoes} questões de múltipla escolha, nem mais nem menos (alternativas A, B, C, D) com enunciado contextualizado, identificação da alternativa correta e explicação detalhada da justificativa da correta e do erro dos distratores.\n"
+            f"- EXATAMENTE {num_questoes} questões de múltipla escolha, nem mais nem menos (alternativas A, B, C, D) com enunciado contextualizado, identificação da alternativa correta e explicação detalhada da justificativa da correta e do erro dos distratores. Na explicação, refira-se às alternativas pelo conteúdo, evitando citar as letras.\n"
             "- NÃO inclua questões discursivas: o simulado é composto somente pelas questões objetivas.\n\n"
             "Gere a saída estritamente em formato JSON estruturado sob a chave 'simulado':\n"
             "{\n"
@@ -290,7 +337,7 @@ def run_study_crew(
     objetivas = simulado.get("questoes_multipla_escolha") or []
     if len(objetivas) != num_questoes:
         logger.warning(f"Agente gerou {len(objetivas)} questões objetivas; solicitadas: {num_questoes}.")
-    simulado["questoes_multipla_escolha"] = objetivas[:num_questoes]
+    simulado["questoes_multipla_escolha"] = [_embaralhar_alternativas(q) for q in objetivas[:num_questoes]]
     simulado.pop("questoes_discursivas", None)
 
     final_output = {
