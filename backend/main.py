@@ -48,6 +48,7 @@ class StudyTextRequest(BaseModel):
     disciplina: str
     dias_ate_prova: int = 5
     horas_por_dia: float = 2.0
+    num_questoes: int = 5
     texto_material: str
     provider: Optional[str] = None
     model_name: Optional[str] = None
@@ -72,8 +73,7 @@ async def get_system_config():
         "available_modes": [
             {"id": "demo", "label": "Modo Demonstração Instantâneo (Garantia do Evento)", "ready": True},
             {"id": "ollama", "label": f"Ollama Local/Offline ({ollama_model})", "ready": True},
-            {"id": "gemini", "label": "Google Gemini (Nuvem)", "ready": has_gemini},
-            {"id": "openai", "label": "OpenAI (Nuvem)", "ready": has_openai}
+            {"id": "gemini", "label": "Google Gemini (Nuvem)", "ready": has_gemini}
         ]
     }
 
@@ -96,6 +96,7 @@ async def processar_texto(payload: StudyTextRequest):
             disciplina=payload.disciplina,
             dias_ate_prova=payload.dias_ate_prova,
             horas_por_dia=payload.horas_por_dia,
+            num_questoes=payload.num_questoes,
             provider=provider,
             model_name=model
         )
@@ -109,6 +110,7 @@ async def processar_pdf(
     disciplina: str = Form(...),
     dias_ate_prova: int = Form(5),
     horas_por_dia: float = Form(2.0),
+    num_questoes: int = Form(5),
     provider: Optional[str] = Form(None),
     model_name: Optional[str] = Form(None),
     arquivo: UploadFile = File(...)
@@ -130,6 +132,7 @@ async def processar_pdf(
             disciplina=disciplina,
             dias_ate_prova=dias_ate_prova,
             horas_por_dia=horas_por_dia,
+            num_questoes=num_questoes,
             provider=chosen_provider,
             model_name=model_name
         )

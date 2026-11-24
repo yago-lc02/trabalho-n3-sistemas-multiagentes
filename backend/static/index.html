@@ -9,37 +9,22 @@
   <link rel="icon" type="image/png" sizes="64x64" href="/static/favicon.png">
   <link rel="icon" type="image/x-icon" href="/favicon.ico">
   <link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
-  
+
   <!-- Font Inter -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-  
+
   <!-- Tailwind CSS via CDN para execução garantida sem dependência de build de pacotes -->
   <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Geração do arquivo PDF para download -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
   <script>
     tailwind.config = {
       theme: {
         extend: {
           fontFamily: {
             sans: ['Inter', 'system-ui', 'sans-serif'],
-          },
-          colors: {
-            brand: {
-              50: '#F0F5FA',
-              100: '#E0EBF5',
-              600: '#0F4C81',
-              700: '#1E3A8A',
-              800: '#0E2E5C',
-              900: '#081D3B',
-            },
-            surface: {
-              card: '#FFFFFF',
-              subtle: '#F8FAFC',
-              border: '#E2E8F0',
-              text: '#0F172A',
-              muted: '#475569',
-            }
           }
         }
       }
@@ -51,285 +36,230 @@
       background-color: #FFFFFF;
       color: #0F172A;
     }
-    @media print {
-      .no-print {
-        display: none !important;
-      }
-      .print-only {
-        display: block !important;
-      }
-      body {
-        background: #FFFFFF !important;
-      }
-    }
   </style>
 </head>
 <body class="bg-white text-slate-900 min-h-screen flex flex-col antialiased">
 
-  <!-- Topbar Superior Acadêmica e Discreta -->
-  <header class="no-print border-b border-slate-200 bg-white sticky top-0 z-40">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-      <div class="flex items-center space-x-3">
-        <div class="w-8 h-8 rounded bg-slate-900 flex items-center justify-center text-white font-semibold text-xs tracking-wider">
-          AGY
-        </div>
-        <div>
-          <h1 class="text-sm font-semibold tracking-tight text-slate-900 leading-tight">
-            Gestor Inteligente de Estudos e Simulador de Provas
-          </h1>
-          <p class="text-xs text-slate-500">
-            FASOFT UniRV — Arquitetura de Sistemas Multiagentes (CrewAI)
-          </p>
-        </div>
+  <!-- Cabeçalho -->
+  <header class="border-b border-slate-200 bg-white sticky top-0 z-40">
+    <div class="max-w-4xl mx-auto px-4 sm:px-6 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      <div>
+        <h1 class="text-sm font-semibold tracking-tight text-slate-900 leading-tight">
+          Gestor Inteligente de Estudos e Simulador de Provas
+        </h1>
+        <p class="text-xs text-slate-500">
+          Arquitetura de Sistemas Multiagentes (CrewAI)
+        </p>
       </div>
 
-      <!-- Seletor de Modo de Execução (Nuvem / Local / Demonstração) -->
+      <!-- Seletor de Modo de Execução -->
       <div class="flex items-center space-x-3">
-        <label for="provider-select" class="text-xs font-medium text-slate-600 hidden sm:inline-block">
+        <label for="provider-select" class="text-xs font-medium text-slate-600">
           Modo do Sistema:
         </label>
         <select id="provider-select" onchange="window.app.mudarProvedor(this.value)" class="text-xs bg-slate-50 border border-slate-300 rounded px-2.5 py-1.5 text-slate-800 font-medium focus:outline-none focus:ring-1 focus:ring-slate-900 transition-colors">
-          <option value="demo">Modo Demonstração Instantâneo (Cache)</option>
+          <option value="gemini" selected>Google Gemini (Nuvem via .env)</option>
           <option value="ollama">Ollama Local / Offline (http://localhost:11434)</option>
-          <option value="gemini">Google Gemini (Nuvem via .env)</option>
-          <option value="openai">OpenAI GPT-4o-mini (Nuvem via .env)</option>
+          <option value="demo">Modo Demonstração Instantâneo (Cache)</option>
         </select>
-        <button onclick="window.app.carregarExemploDemo()" class="text-xs px-2.5 py-1.5 border border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100 rounded font-medium transition-colors">
-          Carregar Exemplo
-        </button>
       </div>
     </div>
   </header>
 
-  <!-- Banner Informativo da Arquitetura Multiagente -->
-  <div class="no-print bg-slate-50 border-b border-slate-200 py-2.5">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between text-xs text-slate-600 gap-2">
-      <div class="flex items-center space-x-2">
-        <span class="inline-block w-2 h-2 rounded-full bg-emerald-600"></span>
-        <span class="font-medium text-slate-800">Pipeline Sequencial CrewAI:</span>
-        <span>(1) Sintetizador Acadêmico &rarr; (2) Elaborador de Banca Examinadora &rarr; (3) Tutor de Revisão Espaçada</span>
-      </div>
-      <div class="text-slate-500 font-mono text-[11px]" id="status-env-text">
-        Provedor Ativo: Modo Demonstração Instantâneo
-      </div>
-    </div>
-  </div>
+  <!-- Conteúdo Principal: coluna única -->
+  <main class="max-w-4xl mx-auto px-4 sm:px-6 py-6 flex-1 w-full flex flex-col space-y-6">
 
-  <!-- Conteúdo Principal -->
-  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 flex-1 w-full grid grid-cols-1 lg:grid-cols-12 gap-8">
-    
-    <!-- Painel de Entrada de Dados (Esquerda - 4 Colunas) -->
-    <section class="no-print lg:col-span-4 flex flex-col space-y-5">
-      <div class="border border-slate-200 rounded-lg p-5 bg-white shadow-sm space-y-4">
-        <div class="border-b border-slate-100 pb-3">
-          <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-800">
-            Parâmetros da Avaliação
-          </h2>
-          <p class="text-xs text-slate-500 mt-0.5">
-            Envie o material didático para orquestração dos agentes
-          </p>
+    <!-- Parâmetros da Avaliação -->
+    <section class="border border-slate-200 rounded-lg p-5 bg-white shadow-sm space-y-4">
+      <div class="border-b border-slate-100 pb-3">
+        <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-800">
+          Parâmetros da Avaliação
+        </h2>
+        <p class="text-xs text-slate-500 mt-0.5">
+          Envie o material em PDF para os agentes gerarem o resumo, o simulado e o cronograma
+        </p>
+      </div>
+
+      <form id="study-form" onsubmit="window.app.processarMaterial(event)" class="space-y-4">
+        <!-- Campo Disciplina -->
+        <div>
+          <label for="disciplina" class="block text-xs font-semibold text-slate-700 mb-1">
+            Disciplina / Conteúdo Programático
+          </label>
+          <input type="text" id="disciplina" name="disciplina" required
+            placeholder="Ex: Engenharia de Software I, Redes de Computadores..."
+            class="w-full text-sm px-3 py-2 border border-slate-300 rounded focus:border-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-900" />
         </div>
 
-        <!-- Formulário -->
-        <form id="study-form" onsubmit="window.app.processarMaterial(event)" class="space-y-4">
-          <!-- Campo Disciplina -->
+        <!-- Dias, Horas e Número de Questões -->
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div>
-            <label for="disciplina" class="block text-xs font-semibold text-slate-700 mb-1">
-              Disciplina / Conteúdo Programático
+            <label for="dias" class="block text-xs font-semibold text-slate-700 mb-1">
+              Dias até a prova
             </label>
-            <input type="text" id="disciplina" name="disciplina" required
-              value="Engenharia de Software I - Tópicos Avançados"
-              placeholder="Ex: Engenharia de Software I, Redes de Computadores..."
-              class="w-full text-xs px-3 py-2 border border-slate-300 rounded focus:border-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-900" />
+            <input type="number" id="dias" name="dias" min="1" max="90" required value="5"
+              class="w-full text-sm px-3 py-2 border border-slate-300 rounded focus:border-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-900" />
           </div>
-
-          <!-- Metadados de Tempo (Dias e Horas) -->
-          <div class="grid grid-cols-2 gap-3">
-            <div>
-              <label for="dias" class="block text-xs font-semibold text-slate-700 mb-1">
-                Dias até a prova
-              </label>
-              <input type="number" id="dias" name="dias" min="1" max="90" required value="5"
-                class="w-full text-xs px-3 py-2 border border-slate-300 rounded focus:border-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-900" />
-            </div>
-            <div>
-              <label for="horas" class="block text-xs font-semibold text-slate-700 mb-1">
-                Horas diárias livres
-              </label>
-              <input type="number" id="horas" name="horas" min="0.5" max="12" step="0.5" required value="2.5"
-                class="w-full text-xs px-3 py-2 border border-slate-300 rounded focus:border-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-900" />
-            </div>
-          </div>
-
-          <!-- Alternância de Tipo de Entrada (PDF vs Texto Rápido) -->
           <div>
-            <div class="flex items-center justify-between mb-1.5">
-              <span class="text-xs font-semibold text-slate-700">Material de Estudo</span>
-              <div class="flex space-x-1">
-                <button type="button" id="tab-btn-pdf" onclick="window.app.selecionarAbaEntrada('pdf')"
-                  class="text-[11px] px-2 py-0.5 rounded font-medium bg-slate-900 text-white">
-                  PDF / Slides
-                </button>
-                <button type="button" id="tab-btn-text" onclick="window.app.selecionarAbaEntrada('text')"
-                  class="text-[11px] px-2 py-0.5 rounded font-medium text-slate-600 hover:bg-slate-100">
-                  Colar Texto
-                </button>
-              </div>
-            </div>
+            <label for="horas" class="block text-xs font-semibold text-slate-700 mb-1">
+              Horas diárias livres
+            </label>
+            <input type="number" id="horas" name="horas" min="0.5" max="12" step="0.5" required value="2.5"
+              class="w-full text-sm px-3 py-2 border border-slate-300 rounded focus:border-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-900" />
+          </div>
+          <div>
+            <label for="num-questoes" class="block text-xs font-semibold text-slate-700 mb-1">
+              Questões no simulado (5 a 10)
+            </label>
+            <select id="num-questoes" name="num-questoes"
+              class="w-full text-sm px-3 py-2 border border-slate-300 rounded bg-white focus:border-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-900">
+              <option value="5" selected>5 questões</option>
+              <option value="6">6 questões</option>
+              <option value="7">7 questões</option>
+              <option value="8">8 questões</option>
+              <option value="9">9 questões</option>
+              <option value="10">10 questões</option>
+            </select>
+          </div>
+        </div>
 
-            <!-- Upload de PDF -->
-            <div id="area-upload-pdf" class="border-2 border-dashed border-slate-200 rounded-lg p-4 text-center hover:border-slate-400 transition-colors cursor-pointer bg-slate-50/50">
-              <input type="file" id="arquivo-pdf" accept=".pdf" class="hidden" onchange="window.app.atualizarNomeArquivo(this)" />
-              <div onclick="document.getElementById('arquivo-pdf').click()">
-                <svg class="mx-auto h-8 w-8 text-slate-400 mb-1" stroke="currentColor" fill="none" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                </svg>
-                <p id="label-arquivo" class="text-xs font-medium text-slate-700">
-                  Clique ou arraste um PDF aqui
-                </p>
-                <p class="text-[11px] text-slate-500 mt-0.5">
-                  Slides de aula, notas de estudo ou artigos (máx. 25MB)
-                </p>
-              </div>
-            </div>
-
-            <!-- Colar Texto Direto -->
-            <div id="area-colar-texto" class="hidden">
-              <textarea id="texto-material" rows="6"
-                placeholder="Cole aqui o texto da aula, apostila ou anotações para análise rápida dos agentes..."
-                class="w-full text-xs p-3 border border-slate-300 rounded focus:border-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-900 font-mono text-slate-800"></textarea>
+        <!-- Material de Estudo -->
+        <div>
+          <div class="flex items-center justify-between mb-1.5">
+            <span class="text-xs font-semibold text-slate-700">Material de Estudo</span>
+            <div class="flex space-x-1">
+              <button type="button" id="tab-btn-pdf" onclick="window.app.selecionarAbaEntrada('pdf')"
+                class="text-[11px] px-2 py-0.5 rounded font-medium bg-slate-900 text-white">
+                PDF
+              </button>
+              <button type="button" id="tab-btn-text" onclick="window.app.selecionarAbaEntrada('text')"
+                class="text-[11px] px-2 py-0.5 rounded font-medium text-slate-600 hover:bg-slate-100">
+                Colar Texto
+              </button>
             </div>
           </div>
 
-          <!-- Botão Submissão -->
-          <button type="submit" id="btn-submit"
-            class="w-full bg-[#1E3A8A] hover:bg-[#0F4C81] text-white py-2.5 px-4 rounded text-xs font-semibold tracking-wide uppercase transition-colors shadow-sm flex items-center justify-center space-x-2">
-            <span>Processar com Agentes CrewAI</span>
-          </button>
-        </form>
+          <!-- Upload de PDF -->
+          <div id="area-upload-pdf" class="border-2 border-dashed border-slate-200 rounded-lg p-5 text-center hover:border-slate-400 transition-colors cursor-pointer bg-slate-50/50">
+            <input type="file" id="arquivo-pdf" accept=".pdf,application/pdf" class="hidden" onchange="window.app.atualizarNomeArquivo(this)" />
+            <div onclick="document.getElementById('arquivo-pdf').click()">
+              <svg class="mx-auto h-8 w-8 text-slate-400 mb-1" stroke="currentColor" fill="none" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+              </svg>
+              <p id="label-arquivo" class="text-sm font-medium text-slate-700">
+                Clique ou arraste um arquivo PDF aqui
+              </p>
+              <p class="text-[11px] text-slate-500 mt-0.5">
+                Somente arquivos PDF com texto selecionável (máx. 25MB)
+              </p>
+            </div>
+          </div>
 
-        <!-- Informações do Workshop -->
-        <div class="mt-4 pt-4 border-t border-slate-100 text-[11px] text-slate-500 space-y-1">
-          <p class="font-medium text-slate-700">Orientações do Workshop:</p>
-          <p>&bull; <strong>Modo Demonstração:</strong> Resposta instantânea ideal para testar a interface e o simulador interativo sem latência.</p>
-          <p>&bull; <strong>Modo Local (Ollama):</strong> Execução privada no laptop do evento sem necessidade de sinal de Wi-Fi.</p>
+          <!-- Colar Texto Direto -->
+          <div id="area-colar-texto" class="hidden">
+            <textarea id="texto-material" rows="6"
+              placeholder="Cole aqui o texto da aula, apostila ou anotações..."
+              class="w-full text-sm p-3 border border-slate-300 rounded focus:border-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-900 text-slate-800"></textarea>
+          </div>
+        </div>
+
+        <!-- Botão Submissão -->
+        <button type="submit" id="btn-submit"
+          class="w-full bg-[#1E3A8A] hover:bg-[#0F4C81] text-white py-2.5 px-4 rounded text-xs font-semibold tracking-wide uppercase transition-colors shadow-sm flex items-center justify-center space-x-2">
+          <span>Processar com Agentes CrewAI</span>
+        </button>
+      </form>
+    </section>
+
+    <!-- Progresso da Execução Multiagente -->
+    <section id="progresso-agentes" class="hidden border border-slate-200 rounded-lg p-5 bg-white shadow-sm space-y-3">
+      <div class="flex items-center justify-between">
+        <span class="text-xs font-semibold text-slate-800 uppercase tracking-wider">
+          Execução dos Agentes Sequenciais
+        </span>
+        <span id="progresso-percentual" class="text-xs font-mono text-slate-500">
+          Em andamento...
+        </span>
+      </div>
+      <div class="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
+        <div id="barra-progresso" class="bg-[#1E3A8A] h-2 rounded-full transition-all duration-500" style="width: 30%"></div>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-2 pt-2 text-xs">
+        <div class="p-2.5 border border-slate-200 rounded bg-slate-50">
+          <div class="font-semibold text-slate-800">1. Sintetizador</div>
+          <div class="text-[11px] text-slate-500 mt-0.5">Extração e complexidade</div>
+        </div>
+        <div class="p-2.5 border border-slate-200 rounded bg-slate-50">
+          <div class="font-semibold text-slate-800">2. Banca Examinadora</div>
+          <div class="text-[11px] text-slate-500 mt-0.5">Simulado e gabarito</div>
+        </div>
+        <div class="p-2.5 border border-slate-200 rounded bg-slate-50">
+          <div class="font-semibold text-slate-800">3. Tutor Espaçado</div>
+          <div class="text-[11px] text-slate-500 mt-0.5">Cronograma diário</div>
         </div>
       </div>
     </section>
 
-    <!-- Área de Resultados e Acompanhamento Multiagente (Direita - 8 Colunas) -->
-    <section class="lg:col-span-8 flex flex-col space-y-4">
-      
-      <!-- Card de Progresso da Execução Multiagente -->
-      <div id="progresso-agentes" class="hidden border border-slate-200 rounded-lg p-5 bg-white shadow-sm space-y-3">
-        <div class="flex items-center justify-between">
-          <span class="text-xs font-semibold text-slate-800 uppercase tracking-wider">
-            Execução dos Agentes Sequenciais
-          </span>
-          <span id="progresso-percentual" class="text-xs font-mono text-slate-500">
-            Em andamento...
-          </span>
-        </div>
-        
-        <!-- Barra de Progresso Sóbria -->
-        <div class="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
-          <div id="barra-progresso" class="bg-[#1E3A8A] h-2 rounded-full transition-all duration-500" style="width: 30%"></div>
-        </div>
+    <!-- Resultados (aparecem só depois do processamento) -->
+    <section id="area-resultados" class="hidden flex-col space-y-4">
 
-        <!-- 3 Etapas dos Agentes -->
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-2 pt-2 text-xs">
-          <div id="step-1" class="p-2.5 border border-slate-200 rounded bg-slate-50">
-            <div class="font-semibold text-slate-800">1. Sintetizador</div>
-            <div class="text-[11px] text-slate-500 mt-0.5">Extração e complexidade</div>
-          </div>
-          <div id="step-2" class="p-2.5 border border-slate-200 rounded bg-slate-50">
-            <div class="font-semibold text-slate-800">2. Banca Examinadora</div>
-            <div class="text-[11px] text-slate-500 mt-0.5">Simulado e gabarito</div>
-          </div>
-          <div id="step-3" class="p-2.5 border border-slate-200 rounded bg-slate-50">
-            <div class="font-semibold text-slate-800">3. Tutor Espaçado</div>
-            <div class="text-[11px] text-slate-500 mt-0.5">Cronograma diário</div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Navegação por Abas Limpas dos Resultados -->
-      <div class="border-b border-slate-200 flex items-center justify-between">
-        <nav class="flex space-x-8" aria-label="Abas">
+      <!-- Abas dos Resultados -->
+      <div class="border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+        <nav class="flex space-x-6 overflow-x-auto" aria-label="Abas">
           <button onclick="window.app.mudarAbaResultado('resumo')" id="tab-nav-resumo"
-            class="py-3 px-1 border-b-2 border-[#1E3A8A] font-semibold text-xs text-[#1E3A8A] flex items-center space-x-1.5">
+            class="py-3 px-1 border-b-2 border-[#1E3A8A] font-semibold text-xs text-[#1E3A8A] flex items-center space-x-1.5 whitespace-nowrap">
             <span>Resumo Estruturado</span>
-            <span id="badge-topicos" class="bg-slate-100 text-slate-700 px-1.5 py-0.2 rounded text-[10px] font-mono">0</span>
+            <span id="badge-topicos" class="bg-slate-100 text-slate-700 px-1.5 rounded text-[10px] font-mono">0</span>
           </button>
           <button onclick="window.app.mudarAbaResultado('simulado')" id="tab-nav-simulado"
-            class="py-3 px-1 border-b-2 border-transparent font-medium text-xs text-slate-500 hover:text-slate-800 hover:border-slate-300 flex items-center space-x-1.5">
+            class="py-3 px-1 border-b-2 border-transparent font-medium text-xs text-slate-500 hover:text-slate-800 hover:border-slate-300 flex items-center space-x-1.5 whitespace-nowrap">
             <span>Simulado Interativo</span>
-            <span id="badge-simulado" class="bg-slate-100 text-slate-700 px-1.5 py-0.2 rounded text-[10px] font-mono">7 Qs</span>
+            <span id="badge-simulado" class="bg-slate-100 text-slate-700 px-1.5 rounded text-[10px] font-mono">0 Qs</span>
           </button>
           <button onclick="window.app.mudarAbaResultado('cronograma')" id="tab-nav-cronograma"
-            class="py-3 px-1 border-b-2 border-transparent font-medium text-xs text-slate-500 hover:text-slate-800 hover:border-slate-300 flex items-center space-x-1.5">
+            class="py-3 px-1 border-b-2 border-transparent font-medium text-xs text-slate-500 hover:text-slate-800 hover:border-slate-300 flex items-center space-x-1.5 whitespace-nowrap">
             <span>Cronograma de Estudos</span>
-            <span id="badge-dias" class="bg-slate-100 text-slate-700 px-1.5 py-0.2 rounded text-[10px] font-mono">0 dias</span>
+            <span id="badge-dias" class="bg-slate-100 text-slate-700 px-1.5 rounded text-[10px] font-mono">0 dias</span>
           </button>
         </nav>
 
-        <!-- Botões de Ação Rápida (Impressão/Exportação) -->
-        <div class="no-print flex items-center space-x-2">
-          <button onclick="window.print()" class="text-xs px-2.5 py-1 border border-slate-200 rounded text-slate-700 hover:bg-slate-50 font-medium">
-            Imprimir / Salvar PDF
-          </button>
-          <button onclick="window.app.exportarMarkdown()" class="text-xs px-2.5 py-1 border border-slate-200 rounded text-slate-700 hover:bg-slate-50 font-medium">
-            Exportar Markdown
-          </button>
-        </div>
+        <button id="btn-download" onclick="window.app.baixarPdf()" class="mb-2 sm:mb-0 text-xs px-3 py-1.5 border border-slate-200 rounded text-slate-700 hover:bg-slate-50 font-medium">
+          Download
+        </button>
       </div>
 
       <!-- PAINEL 1: Resumo Estruturado -->
       <div id="conteudo-resumo" class="space-y-4">
         <div class="border border-slate-200 rounded-lg p-5 bg-white shadow-sm space-y-4">
           <div>
-            <h3 id="resumo-titulo" class="text-base font-semibold text-slate-900">
-              Aguardando envio de material...
-            </h3>
-            <p id="resumo-visao-geral" class="text-xs text-slate-600 mt-1 leading-relaxed">
-              Envie um arquivo PDF ou cole o conteúdo na barra lateral para acionar a extração do Agente Sintetizador Acadêmico.
-            </p>
+            <h3 id="resumo-titulo" class="text-base font-semibold text-slate-900"></h3>
+            <p id="resumo-visao-geral" class="text-sm text-slate-600 mt-1 leading-relaxed"></p>
           </div>
-
           <div class="border-t border-slate-100 pt-3">
             <h4 class="text-xs font-semibold text-slate-800 uppercase tracking-wider mb-3">
               Tópicos Principais e Complexidade Didática
             </h4>
-            <div id="lista-topicos" class="space-y-3">
-              <!-- Renderizado via JavaScript -->
-            </div>
+            <div id="lista-topicos" class="space-y-3"></div>
           </div>
         </div>
       </div>
 
       <!-- PAINEL 2: Simulado Interativo -->
       <div id="conteudo-simulado" class="hidden space-y-4">
-        <!-- Placar e Instrução -->
         <div class="border border-slate-200 rounded-lg p-4 bg-slate-50/70 flex flex-col sm:flex-row items-center justify-between gap-3">
           <div>
             <h3 class="text-xs font-semibold uppercase tracking-wider text-slate-800">
               Simulador Avaliativo Inédito
             </h3>
-            <p class="text-xs text-slate-500 mt-0.5">
-              5 questões objetivas com correção automatizada + 2 questões conceituais discursivas.
-            </p>
+            <p id="simulado-descricao" class="text-xs text-slate-500 mt-0.5"></p>
           </div>
           <div id="box-pontuacao" class="hidden bg-white border border-slate-200 px-3 py-1.5 rounded text-xs font-mono text-slate-800">
-            Pontuação: <span id="pontos-valor" class="font-bold text-[#1E3A8A]">0</span> de 5 acertos
+            Pontuação: <span id="pontos-valor" class="font-bold text-[#1E3A8A]">0</span> de <span id="pontos-total">0</span> acertos
           </div>
         </div>
 
-        <!-- Questões de Múltipla Escolha -->
-        <div class="space-y-4" id="lista-questoes-objetivas">
-          <!-- Renderizado via JS -->
-        </div>
+        <div class="space-y-4" id="lista-questoes-objetivas"></div>
 
-        <!-- Botão Corrigir Simulado -->
         <div class="pt-2">
           <button onclick="window.app.corrigirSimulado()"
             class="bg-[#1E3A8A] hover:bg-[#0F4C81] text-white py-2 px-5 rounded text-xs font-semibold tracking-wide uppercase transition-colors shadow-sm">
@@ -337,14 +267,11 @@
           </button>
         </div>
 
-        <!-- Questões Discursivas -->
         <div class="border-t border-slate-200 pt-5 mt-6">
           <h4 class="text-xs font-semibold text-slate-800 uppercase tracking-wider mb-3">
             Questões Discursivas da Banca
           </h4>
-          <div class="space-y-4" id="lista-questoes-discursivas">
-            <!-- Renderizado via JS -->
-          </div>
+          <div class="space-y-4" id="lista-questoes-discursivas"></div>
         </div>
       </div>
 
@@ -355,18 +282,13 @@
             <h3 class="text-sm font-semibold uppercase tracking-wider text-slate-800">
               Estratégia Pedagógica e Curva de Esquecimento
             </h3>
-            <p id="cronograma-estrategia" class="text-xs text-slate-600 mt-1 leading-relaxed">
-              O Agente 3 prioriza tópicos de alta densidade no início para permitir repetição espaçada e fixação ativa antes do exame.
-            </p>
+            <p id="cronograma-estrategia" class="text-sm text-slate-600 mt-1 leading-relaxed"></p>
           </div>
-
           <div class="border-t border-slate-100 pt-4">
             <h4 class="text-xs font-semibold text-slate-800 uppercase tracking-wider mb-3">
               Planejamento Diário de Atividades
             </h4>
-            <div id="lista-dias-cronograma" class="space-y-3">
-              <!-- Renderizado via JS -->
-            </div>
+            <div id="lista-dias-cronograma" class="space-y-3"></div>
           </div>
         </div>
       </div>
@@ -375,8 +297,8 @@
   </main>
 
   <!-- Rodapé Institucional -->
-  <footer class="no-print border-t border-slate-200 py-4 bg-white text-xs text-slate-500 mt-10">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-2">
+  <footer class="border-t border-slate-200 py-4 bg-white text-xs text-slate-500 mt-10">
+    <div class="max-w-4xl mx-auto px-4 sm:px-6 flex flex-col sm:flex-row items-center justify-between gap-2">
       <div>
         UNIRV — Engenharia de Software | Workshop FASOFT
       </div>

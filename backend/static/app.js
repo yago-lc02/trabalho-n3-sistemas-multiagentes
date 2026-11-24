@@ -1,56 +1,56 @@
 /**
- * Aplicação Frontend para o Workshop FASOFT UniRV
  * Gestor Inteligente de Estudos e Simulador de Provas Multiagentes
  */
+
+const ALT_BASE = "flex items-start space-x-2.5 p-3 rounded border text-sm";
+
+function esc(valor) {
+  return String(valor ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
 
 class StudyApp {
   constructor() {
     this.currentData = null;
     this.tipoEntrada = 'pdf'; // 'pdf' | 'text'
     this.respostasUsuario = {};
-    this.providerAtual = 'demo';
-    
-    this.init();
-  }
-
-  async init() {
-    await this.carregarConfiguracao();
-    // Carrega o exemplo demonstrativo inicial por padrão para visualização imediata da interface
-    await this.carregarExemploDemo();
-  }
-
-  async carregarConfiguracao() {
-    try {
-      const resp = await fetch('/api/config');
-      if (resp.ok) {
-        const config = await resp.json();
-        this.providerAtual = config.current_provider || 'demo';
-        const sel = document.getElementById('provider-select');
-        if (sel) {
-          sel.value = this.providerAtual;
-        }
-        this.atualizarTextoProvedor(this.providerAtual);
-      }
-    } catch (e) {
-      console.warn("Falha ao carregar /api/config:", e);
-    }
-  }
-
-  atualizarTextoProvedor(provider) {
-    const el = document.getElementById('status-env-text');
-    if (!el) return;
-    const labels = {
-      'demo': 'Modo Demonstração Instantâneo (Garantia de Velocidade)',
-      'ollama': 'Modo Local / 100% Offline (Ollama: llama3.2)',
-      'gemini': 'Modo Nuvem Google (Gemini 1.5 Flash via .env)',
-      'openai': 'Modo Nuvem OpenAI (GPT-4o-mini via .env)'
-    };
-    el.textContent = `Provedor Ativo: ${labels[provider] || provider}`;
+    // O sistema sempre abre no Google Gemini
+    this.providerAtual = 'gemini';
+    document.getElementById('provider-select').value = this.providerAtual;
+    this.configurarArrastarSoltar();
   }
 
   mudarProvedor(val) {
     this.providerAtual = val;
-    this.atualizarTextoProvedor(val);
+  }
+
+  configurarArrastarSoltar() {
+    const area = document.getElementById('area-upload-pdf');
+    const input = document.getElementById('arquivo-pdf');
+    ['dragenter', 'dragover'].forEach(evt => area.addEventListener(evt, e => {
+      e.preventDefault();
+      area.classList.add('border-slate-500');
+    }));
+    ['dragleave', 'drop'].forEach(evt => area.addEventListener(evt, e => {
+      e.preventDefault();
+      area.classList.remove('border-slate-500');
+    }));
+    area.addEventListener('drop', e => {
+      const arquivo = e.dataTransfer.files && e.dataTransfer.files[0];
+      if (!arquivo) return;
+      if (!arquivo.name.toLowerCase().endsWith('.pdf')) {
+        alert('Somente arquivos PDF são aceitos.');
+        return;
+      }
+      const dt = new DataTransfer();
+      dt.items.add(arquivo);
+      input.files = dt.files;
+      this.atualizarNomeArquivo(input);
+    });
   }
 
   selecionarAbaEntrada(tipo) {
@@ -59,18 +59,13 @@ class StudyApp {
     const btnText = document.getElementById('tab-btn-text');
     const areaPdf = document.getElementById('area-upload-pdf');
     const areaText = document.getElementById('area-colar-texto');
+    const ativo = "text-[11px] px-2 py-0.5 rounded font-medium bg-slate-900 text-white";
+    const inativo = "text-[11px] px-2 py-0.5 rounded font-medium text-slate-600 hover:bg-slate-100";
 
-    if (tipo === 'pdf') {
-      btnPdf.className = "text-[11px] px-2 py-0.5 rounded font-medium bg-slate-900 text-white";
-      btnText.className = "text-[11px] px-2 py-0.5 rounded font-medium text-slate-600 hover:bg-slate-100";
-      areaPdf.classList.remove('hidden');
-      areaText.classList.add('hidden');
-    } else {
-      btnText.className = "text-[11px] px-2 py-0.5 rounded font-medium bg-slate-900 text-white";
-      btnPdf.className = "text-[11px] px-2 py-0.5 rounded font-medium text-slate-600 hover:bg-slate-100";
-      areaText.classList.remove('hidden');
-      areaPdf.classList.add('hidden');
-    }
+    btnPdf.className = tipo === 'pdf' ? ativo : inativo;
+    btnText.className = tipo === 'pdf' ? inativo : ativo;
+    areaPdf.classList.toggle('hidden', tipo !== 'pdf');
+    areaText.classList.toggle('hidden', tipo === 'pdf');
   }
 
   atualizarNomeArquivo(input) {
@@ -78,34 +73,20 @@ class StudyApp {
     if (input.files && input.files[0]) {
       label.textContent = `Arquivo selecionado: ${input.files[0].name} (${(input.files[0].size / 1024).toFixed(1)} KB)`;
     } else {
-      label.textContent = "Clique ou arraste um PDF aqui";
-    }
-  }
-
-  async carregarExemploDemo() {
-    try {
-      const resp = await fetch('/api/demo-data');
-      if (resp.ok) {
-        const data = await resp.json();
-        this.renderizarResultados(data);
-      }
-    } catch (e) {
-      console.error("Erro ao carregar exemplo demo:", e);
+      label.textContent = "Clique ou arraste um arquivo PDF aqui";
     }
   }
 
   mudarAbaResultado(aba) {
-    const abas = ['resumo', 'simulado', 'cronograma'];
-    abas.forEach(nome => {
+    ['resumo', 'simulado', 'cronograma'].forEach(nome => {
       const elConteudo = document.getElementById(`conteudo-${nome}`);
       const elNav = document.getElementById(`tab-nav-${nome}`);
-      
       if (nome === aba) {
         elConteudo.classList.remove('hidden');
-        elNav.className = "py-3 px-1 border-b-2 border-[#1E3A8A] font-semibold text-xs text-[#1E3A8A] flex items-center space-x-1.5";
+        elNav.className = "py-3 px-1 border-b-2 border-[#1E3A8A] font-semibold text-xs text-[#1E3A8A] flex items-center space-x-1.5 whitespace-nowrap";
       } else {
         elConteudo.classList.add('hidden');
-        elNav.className = "py-3 px-1 border-b-2 border-transparent font-medium text-xs text-slate-500 hover:text-slate-800 hover:border-slate-300 flex items-center space-x-1.5";
+        elNav.className = "py-3 px-1 border-b-2 border-transparent font-medium text-xs text-slate-500 hover:text-slate-800 hover:border-slate-300 flex items-center space-x-1.5 whitespace-nowrap";
       }
     });
   }
@@ -120,6 +101,23 @@ class StudyApp {
     const disciplina = document.getElementById('disciplina').value;
     const dias = parseInt(document.getElementById('dias').value) || 5;
     const horas = parseFloat(document.getElementById('horas').value) || 2.0;
+    const numQuestoes = parseInt(document.getElementById('num-questoes').value) || 5;
+
+    let fileInput = null;
+    let texto = '';
+    if (this.tipoEntrada === 'pdf') {
+      fileInput = document.getElementById('arquivo-pdf');
+      if (!fileInput.files || !fileInput.files[0]) {
+        alert("Por favor, selecione um arquivo PDF.");
+        return;
+      }
+    } else {
+      texto = document.getElementById('texto-material').value;
+      if (!texto.trim()) {
+        alert("Por favor, cole o texto do material.");
+        return;
+      }
+    }
 
     btnSubmit.disabled = true;
     btnSubmit.classList.add('opacity-50', 'cursor-not-allowed');
@@ -127,9 +125,8 @@ class StudyApp {
     barra.style.width = '20%';
     statusTxt.textContent = "Iniciando Agente 1 (Sintetizador)...";
 
-    // Simula visualmente o pipeline sequencial CrewAI se for demo ou espera a requisição
-    let timer = setInterval(() => {
-      let currentW = parseInt(barra.style.width) || 20;
+    const timer = setInterval(() => {
+      const currentW = parseInt(barra.style.width) || 20;
       if (currentW < 85) {
         barra.style.width = (currentW + 15) + '%';
         if (currentW > 30 && currentW <= 60) {
@@ -141,71 +138,41 @@ class StudyApp {
     }, 400);
 
     try {
-      let data = null;
-
+      let resp;
       if (this.tipoEntrada === 'pdf') {
-        const fileInput = document.getElementById('arquivo-pdf');
-        if (!fileInput.files || !fileInput.files[0]) {
-          alert("Por favor, selecione um arquivo PDF ou mude para a aba 'Colar Texto'.");
-          clearInterval(timer);
-          boxProgresso.classList.add('hidden');
-          btnSubmit.disabled = false;
-          btnSubmit.classList.remove('opacity-50', 'cursor-not-allowed');
-          return;
-        }
-
         const formData = new FormData();
         formData.append('disciplina', disciplina);
         formData.append('dias_ate_prova', dias);
         formData.append('horas_por_dia', horas);
+        formData.append('num_questoes', numQuestoes);
         formData.append('provider', this.providerAtual);
         formData.append('arquivo', fileInput.files[0]);
-
-        const resp = await fetch('/api/processar-pdf', {
-          method: 'POST',
-          body: formData
-        });
-
-        if (!resp.ok) {
-          const errData = await resp.json();
-          throw new Error(errData.detail || "Erro ao processar PDF");
-        }
-        data = await resp.json();
-
+        resp = await fetch('/api/processar-pdf', { method: 'POST', body: formData });
       } else {
-        const texto = document.getElementById('texto-material').value;
-        if (!texto.trim()) {
-          alert("Por favor, digite ou cole o texto do material.");
-          clearInterval(timer);
-          boxProgresso.classList.add('hidden');
-          btnSubmit.disabled = false;
-          btnSubmit.classList.remove('opacity-50', 'cursor-not-allowed');
-          return;
-        }
-
-        const resp = await fetch('/api/processar-texto', {
+        resp = await fetch('/api/processar-texto', {
           method: 'POST',
           headers: {'Content-Type': 'application/json'},
           body: JSON.stringify({
             disciplina: disciplina,
             dias_ate_prova: dias,
             horas_por_dia: horas,
+            num_questoes: numQuestoes,
             texto_material: texto,
             provider: this.providerAtual
           })
         });
-
-        if (!resp.ok) {
-          const errData = await resp.json();
-          throw new Error(errData.detail || "Erro ao processar texto");
-        }
-        data = await resp.json();
       }
 
+      if (!resp.ok) {
+        const errData = await resp.json().catch(() => ({}));
+        throw new Error(errData.detail || "Erro ao processar o material");
+      }
+      const data = await resp.json();
+
+      clearInterval(timer);
       barra.style.width = '100%';
       statusTxt.textContent = "Orquestração concluída!";
       setTimeout(() => {
-        clearInterval(timer);
         boxProgresso.classList.add('hidden');
         this.renderizarResultados(data);
       }, 500);
@@ -224,11 +191,16 @@ class StudyApp {
     this.currentData = data;
     this.respostasUsuario = {};
 
+    const area = document.getElementById('area-resultados');
+    area.classList.remove('hidden');
+    area.classList.add('flex');
+    this.mudarAbaResultado('resumo');
+
     // 1. Resumo
     const resumo = data.resumo || {};
     document.getElementById('resumo-titulo').textContent = resumo.titulo || data.disciplina;
     document.getElementById('resumo-visao-geral').textContent = resumo.visao_geral || "";
-    
+
     const topicos = resumo.topicos || [];
     document.getElementById('badge-topicos').textContent = topicos.length;
     const listaTopicosEl = document.getElementById('lista-topicos');
@@ -241,22 +213,22 @@ class StudyApp {
       else if (t.complexidade === 'Baixa') badgeClass = "bg-emerald-50 text-emerald-700 border-emerald-200";
 
       const pontosHtml = (t.pontos_criticos || []).map(p => `
-        <li class="flex items-start space-x-1.5 text-xs text-slate-600">
+        <li class="flex items-start space-x-1.5 text-sm text-slate-600">
           <span class="text-slate-400">&bull;</span>
-          <span>${p}</span>
+          <span>${esc(p)}</span>
         </li>
       `).join('');
 
       const card = document.createElement('div');
-      card.className = "border border-slate-200 rounded p-3.5 bg-slate-50/50 space-y-2";
+      card.className = "border border-slate-200 rounded p-4 bg-slate-50/50 space-y-2";
       card.innerHTML = `
-        <div class="flex items-center justify-between">
-          <h5 class="text-xs font-semibold text-slate-900">${t.nome}</h5>
-          <span class="text-[10px] font-semibold px-2 py-0.5 rounded border ${badgeClass}">
-            Complexidade ${t.complexidade}
+        <div class="flex items-center justify-between gap-2">
+          <h5 class="text-sm font-semibold text-slate-900">${esc(t.nome)}</h5>
+          <span class="text-[10px] font-semibold px-2 py-0.5 rounded border whitespace-nowrap ${badgeClass}">
+            Complexidade ${esc(t.complexidade)}
           </span>
         </div>
-        <p class="text-xs text-slate-600 leading-relaxed">${t.definicao}</p>
+        <p class="text-sm text-slate-600 leading-relaxed">${esc(t.definicao)}</p>
         <ul class="space-y-1 pt-1 border-t border-slate-200/60">
           ${pontosHtml}
         </ul>
@@ -267,63 +239,62 @@ class StudyApp {
     // 2. Simulado
     const simulado = data.simulado || {};
     const questoesObj = simulado.questoes_multipla_escolha || [];
+    const questoesDisc = simulado.questoes_discursivas || [];
     const containerObj = document.getElementById('lista-questoes-objetivas');
     containerObj.innerHTML = '';
     document.getElementById('box-pontuacao').classList.add('hidden');
+    document.getElementById('pontos-total').textContent = questoesObj.length;
+    document.getElementById('badge-simulado').textContent = `${questoesObj.length + questoesDisc.length} Qs`;
+    document.getElementById('simulado-descricao').textContent =
+      `${questoesObj.length} questões objetivas com correção automática + ${questoesDisc.length} questões discursivas.`;
 
     questoesObj.forEach((q, idx) => {
       const qDiv = document.createElement('div');
-      qDiv.id = `q-card-${q.id}`;
-      qDiv.className = "border border-slate-200 rounded-lg p-4 bg-white shadow-sm space-y-3";
-      
+      qDiv.className = "border border-slate-200 rounded-lg p-5 bg-white shadow-sm space-y-3";
+
       let alternativasHtml = '';
       for (const [letra, texto] of Object.entries(q.alternativas || {})) {
         alternativasHtml += `
-          <label class="flex items-start space-x-2.5 p-2 rounded border border-slate-200 hover:bg-slate-50 cursor-pointer transition-colors text-xs text-slate-700" id="alt-box-${q.id}-${letra}">
-            <input type="radio" name="questao-${q.id}" value="${letra}" onchange="window.app.selecionarResposta(${q.id}, '${letra}')" class="mt-0.5 text-[#1E3A8A] focus:ring-0">
-            <span class="font-semibold text-slate-900">${letra})</span>
-            <span class="leading-relaxed">${texto}</span>
+          <label class="${ALT_BASE} border-slate-200 hover:bg-slate-50 cursor-pointer transition-colors text-slate-700" id="alt-box-${idx}-${esc(letra)}">
+            <input type="radio" name="questao-${idx}" value="${esc(letra)}" onchange="window.app.selecionarResposta(${idx}, this.value)" class="mt-1 text-[#1E3A8A] focus:ring-0">
+            <span class="font-semibold text-slate-900">${esc(letra)})</span>
+            <span class="leading-relaxed">${esc(texto)}</span>
           </label>
         `;
       }
 
       qDiv.innerHTML = `
         <div class="flex items-start justify-between">
-          <span class="text-xs font-bold text-[#1E3A8A]">Questão ${idx + 1} (Objetiva)</span>
-          <span id="q-status-${q.id}" class="text-[11px] font-medium text-slate-400">Não respondida</span>
+          <span class="text-sm font-bold text-[#1E3A8A]">Questão ${idx + 1} (Objetiva)</span>
+          <span id="q-status-${idx}" class="text-xs font-medium text-slate-400">Não respondida</span>
         </div>
-        <p class="text-xs text-slate-800 leading-relaxed font-medium">${q.enunciado}</p>
+        <p class="text-base text-slate-800 leading-relaxed font-medium">${esc(q.enunciado)}</p>
         <div class="space-y-2 pt-1">
           ${alternativasHtml}
         </div>
-        <div id="q-feedback-${q.id}" class="hidden p-3 rounded border text-xs leading-relaxed mt-2">
-          <!-- Comentário do gabarito -->
-        </div>
+        <div id="q-feedback-${idx}" class="hidden"></div>
       `;
       containerObj.appendChild(qDiv);
     });
 
-    // Questões Discursivas
-    const questoesDisc = simulado.questoes_discursivas || [];
     const containerDisc = document.getElementById('lista-questoes-discursivas');
     containerDisc.innerHTML = '';
 
     questoesDisc.forEach((qd, idx) => {
       const discDiv = document.createElement('div');
-      discDiv.className = "border border-slate-200 rounded-lg p-4 bg-white shadow-sm space-y-3";
+      discDiv.className = "border border-slate-200 rounded-lg p-5 bg-white shadow-sm space-y-3";
       discDiv.innerHTML = `
         <div class="flex items-center justify-between">
-          <span class="text-xs font-bold text-slate-800">Questão Discursiva ${idx + 1}</span>
-          <button onclick="window.app.toggleRespostaEsperada(${qd.id})" class="text-xs text-[#1E3A8A] hover:underline font-medium">
+          <span class="text-sm font-bold text-slate-800">Questão Discursiva ${idx + 1}</span>
+          <button onclick="window.app.toggleRespostaEsperada(${idx})" class="text-sm text-[#1E3A8A] hover:underline font-medium">
             Ver resposta esperada
           </button>
         </div>
-        <p class="text-xs text-slate-800 leading-relaxed font-medium">${qd.enunciado}</p>
+        <p class="text-base text-slate-800 leading-relaxed font-medium">${esc(qd.enunciado)}</p>
         <textarea rows="3" placeholder="Redija seu rascunho de resposta aqui para fixação..."
-          class="w-full text-xs p-2.5 border border-slate-200 rounded focus:border-slate-800 focus:outline-none"></textarea>
-        <div id="resp-disc-${qd.id}" class="hidden p-3 bg-slate-50 border border-slate-200 rounded text-xs text-slate-700 whitespace-pre-line leading-relaxed">
-          <strong class="block text-slate-900 mb-1">Gabarito Conceitual do Professor:</strong>
-          ${qd.resposta_esperada}
+          class="w-full text-sm p-3 border border-slate-200 rounded focus:border-slate-800 focus:outline-none"></textarea>
+        <div id="resp-disc-${idx}" class="hidden p-3 bg-slate-50 border border-slate-200 rounded text-sm text-slate-700 whitespace-pre-line leading-relaxed">
+          <strong class="block text-slate-900 mb-1">Gabarito Conceitual do Professor:</strong>${esc(qd.resposta_esperada)}
         </div>
       `;
       containerDisc.appendChild(discDiv);
@@ -332,7 +303,7 @@ class StudyApp {
     // 3. Cronograma
     const cronograma = data.cronograma || {};
     document.getElementById('cronograma-estrategia').textContent = cronograma.resumo_estrategia || "";
-    
+
     const diasList = cronograma.dias || [];
     document.getElementById('badge-dias').textContent = `${diasList.length} dias`;
     const containerDias = document.getElementById('lista-dias-cronograma');
@@ -340,47 +311,43 @@ class StudyApp {
 
     diasList.forEach(d => {
       const ativHtml = (d.atividades || []).map(a => `
-        <li class="flex items-start space-x-2 text-xs text-slate-700">
+        <li class="flex items-start space-x-2 text-sm text-slate-700">
           <span class="text-[#1E3A8A] font-bold">&bull;</span>
-          <span>${a}</span>
+          <span>${esc(a)}</span>
         </li>
       `).join('');
 
       const topicosBadges = (d.topicos_alvo || []).map(t => `
-        <span class="inline-block text-[10px] bg-slate-100 text-slate-700 border border-slate-200 px-1.5 py-0.5 rounded">
-          ${t}
-        </span>
+        <span class="inline-block text-[10px] bg-slate-100 text-slate-700 border border-slate-200 px-1.5 py-0.5 rounded">${esc(t)}</span>
       `).join(' ');
 
       const diaCard = document.createElement('div');
       diaCard.className = "border border-slate-200 rounded-lg p-4 bg-white shadow-sm space-y-2";
       diaCard.innerHTML = `
-        <div class="flex items-center justify-between border-b border-slate-100 pb-2">
+        <div class="flex items-center justify-between gap-2 border-b border-slate-100 pb-2">
           <div class="flex items-center space-x-2">
-            <span class="bg-[#1E3A8A] text-white text-[11px] font-bold px-2 py-0.5 rounded">
-              Dia ${d.dia}
-            </span>
-            <h5 class="text-xs font-semibold text-slate-900">${d.foco_principal}</h5>
+            <span class="bg-[#1E3A8A] text-white text-[11px] font-bold px-2 py-0.5 rounded whitespace-nowrap">Dia ${esc(d.dia)}</span>
+            <h5 class="text-sm font-semibold text-slate-900">${esc(d.foco_principal)}</h5>
           </div>
-          <span class="text-xs font-mono text-slate-500">${d.horas_previstas}h de estudo</span>
+          <span class="text-xs font-mono text-slate-500 whitespace-nowrap">${esc(d.horas_previstas)}h de estudo</span>
         </div>
         <div class="pt-1">
           <div class="text-[11px] text-slate-500 mb-1.5">Tópicos priorizados: ${topicosBadges}</div>
-          <ul class="space-y-1.5">
-            ${ativHtml}
-          </ul>
+          <ul class="space-y-1.5">${ativHtml}</ul>
         </div>
       `;
       containerDias.appendChild(diaCard);
     });
+
+    area.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
-  selecionarResposta(questaoId, letra) {
-    this.respostasUsuario[questaoId] = letra;
-    const statusEl = document.getElementById(`q-status-${questaoId}`);
+  selecionarResposta(idx, letra) {
+    this.respostasUsuario[idx] = letra;
+    const statusEl = document.getElementById(`q-status-${idx}`);
     if (statusEl) {
       statusEl.textContent = `Marcada: ${letra}`;
-      statusEl.className = "text-[11px] font-semibold text-slate-700";
+      statusEl.className = "text-xs font-semibold text-slate-700";
     }
   }
 
@@ -389,114 +356,144 @@ class StudyApp {
     const questoes = this.currentData.simulado.questoes_multipla_escolha || [];
     let acertos = 0;
 
-    questoes.forEach(q => {
-      const respUser = this.respostasUsuario[q.id];
-      const feedbackEl = document.getElementById(`q-feedback-${q.id}`);
-      const statusEl = document.getElementById(`q-status-${q.id}`);
-      
-      // Reseta classes visuais das alternativas
-      for (const letra of ['A', 'B', 'C', 'D']) {
-        const altBox = document.getElementById(`alt-box-${q.id}-${letra}`);
-        if (altBox) {
-          altBox.className = "flex items-start space-x-2.5 p-2 rounded border border-slate-200 text-xs text-slate-700";
-        }
+    questoes.forEach((q, idx) => {
+      const respUser = this.respostasUsuario[idx];
+      const feedbackEl = document.getElementById(`q-feedback-${idx}`);
+      const statusEl = document.getElementById(`q-status-${idx}`);
+
+      for (const letra of Object.keys(q.alternativas || {})) {
+        const altBox = document.getElementById(`alt-box-${idx}-${letra}`);
+        if (altBox) altBox.className = `${ALT_BASE} border-slate-200 text-slate-700`;
       }
 
-      if (respUser === q.resposta_correta) {
-        acertos++;
-        if (statusEl) {
-          statusEl.textContent = "✓ Correta";
-          statusEl.className = "text-[11px] font-semibold text-emerald-700";
-        }
-      } else {
-        if (statusEl) {
-          statusEl.textContent = "✕ Incorreta";
-          statusEl.className = "text-[11px] font-semibold text-red-600";
-        }
+      const correta = respUser === q.resposta_correta;
+      if (correta) acertos++;
+      if (statusEl) {
+        statusEl.textContent = correta ? "✓ Correta" : "✕ Incorreta";
+        statusEl.className = `text-xs font-semibold ${correta ? 'text-emerald-700' : 'text-red-600'}`;
       }
 
-      // Destaca alternativa correta em verde suave e incorreta marcada em vermelho suave
-      const boxCorreta = document.getElementById(`alt-box-${q.id}-${q.resposta_correta}`);
+      const boxCorreta = document.getElementById(`alt-box-${idx}-${q.resposta_correta}`);
       if (boxCorreta) {
-        boxCorreta.className = "flex items-start space-x-2.5 p-2 rounded border border-emerald-300 bg-emerald-50 text-xs text-emerald-900 font-medium";
+        boxCorreta.className = `${ALT_BASE} border-emerald-300 bg-emerald-50 text-emerald-900 font-medium`;
       }
-      if (respUser && respUser !== q.resposta_correta) {
-        const boxErrada = document.getElementById(`alt-box-${q.id}-${respUser}`);
-        if (boxErrada) {
-          boxErrada.className = "flex items-start space-x-2.5 p-2 rounded border border-red-300 bg-red-50 text-xs text-red-900";
-        }
+      if (respUser && !correta) {
+        const boxErrada = document.getElementById(`alt-box-${idx}-${respUser}`);
+        if (boxErrada) boxErrada.className = `${ALT_BASE} border-red-300 bg-red-50 text-red-900`;
       }
 
-      // Exibe gabarito comentado
       if (feedbackEl) {
-        feedbackEl.classList.remove('hidden');
-        feedbackEl.className = "p-3 rounded border text-xs leading-relaxed mt-2 bg-slate-50 border-slate-200 text-slate-800";
+        feedbackEl.className = "p-3 rounded border text-sm leading-relaxed mt-2 bg-slate-50 border-slate-200 text-slate-800";
         feedbackEl.innerHTML = `
-          <strong class="block text-slate-900 mb-0.5">Gabarito Comentado (Alternativa correta: ${q.resposta_correta}):</strong>
-          <span>${q.explicacao}</span>
+          <strong class="block text-slate-900 mb-0.5">Gabarito Comentado (Alternativa correta: ${esc(q.resposta_correta)}):</strong>
+          <span>${esc(q.explicacao)}</span>
         `;
       }
     });
 
-    const boxPlacar = document.getElementById('box-pontuacao');
-    const valorPlacar = document.getElementById('pontos-valor');
-    if (boxPlacar && valorPlacar) {
-      valorPlacar.textContent = acertos;
-      boxPlacar.classList.remove('hidden');
-    }
+    document.getElementById('pontos-valor').textContent = acertos;
+    document.getElementById('box-pontuacao').classList.remove('hidden');
   }
 
-  toggleRespostaEsperada(id) {
-    const el = document.getElementById(`resp-disc-${id}`);
-    if (el) {
-      el.classList.toggle('hidden');
-    }
+  toggleRespostaEsperada(idx) {
+    const el = document.getElementById(`resp-disc-${idx}`);
+    if (el) el.classList.toggle('hidden');
   }
 
-  exportarMarkdown() {
+  montarHtmlPdf() {
+    const d = this.currentData;
+    const resumo = d.resumo || {};
+    const simulado = d.simulado || {};
+    const cronograma = d.cronograma || {};
+    const h2 = 'font-size:16px;color:#1E3A8A;border-bottom:1px solid #CBD5E1;padding-bottom:4px;margin:22px 0 10px;';
+    const bloco = 'page-break-inside:avoid;margin-bottom:12px;';
+
+    const topicos = (resumo.topicos || []).map(t => `
+      <div style="${bloco}">
+        <div style="font-weight:600;font-size:13px;">${esc(t.nome)} <span style="font-weight:400;color:#64748B;">(Complexidade ${esc(t.complexidade)})</span></div>
+        <div style="font-size:12px;margin:3px 0;">${esc(t.definicao)}</div>
+        ${(t.pontos_criticos || []).map(p => `<div style="font-size:12px;color:#334155;margin:1px 0 1px 10px;">• ${esc(p)}</div>`).join('')}
+      </div>`).join('');
+
+    const objetivas = (simulado.questoes_multipla_escolha || []).map((q, i) => `
+      <div style="${bloco}">
+        <div style="font-weight:600;font-size:13px;">Questão ${i + 1}</div>
+        <div style="font-size:13px;margin:3px 0 5px;">${esc(q.enunciado)}</div>
+        ${Object.entries(q.alternativas || {}).map(([l, t]) => `<div style="font-size:12px;margin:2px 0 2px 10px;"><b>${esc(l)})</b> ${esc(t)}</div>`).join('')}
+      </div>`).join('');
+
+    const discursivas = (simulado.questoes_discursivas || []).map((q, i) => `
+      <div style="${bloco}">
+        <div style="font-weight:600;font-size:13px;">Questão Discursiva ${i + 1}</div>
+        <div style="font-size:13px;margin-top:3px;">${esc(q.enunciado)}</div>
+      </div>`).join('');
+
+    const gabarito = (simulado.questoes_multipla_escolha || []).map((q, i) => `
+      <div style="${bloco}font-size:12px;"><b>Questão ${i + 1}: ${esc(q.resposta_correta)}</b> — ${esc(q.explicacao)}</div>`).join('')
+      + (simulado.questoes_discursivas || []).map((q, i) => `
+      <div style="${bloco}font-size:12px;white-space:pre-line;"><b>Discursiva ${i + 1}:</b> ${esc(q.resposta_esperada)}</div>`).join('');
+
+    const dias = (cronograma.dias || []).map(dia => `
+      <div style="${bloco}">
+        <div style="font-weight:600;font-size:13px;">Dia ${esc(dia.dia)}: ${esc(dia.foco_principal)} <span style="font-weight:400;color:#64748B;">(${esc(dia.horas_previstas)}h)</span></div>
+        ${(dia.atividades || []).map(a => `<div style="font-size:12px;margin:2px 0 2px 10px;">• ${esc(a)}</div>`).join('')}
+      </div>`).join('');
+
+    return `
+      <div style="font-family:Inter,Arial,sans-serif;color:#0F172A;padding:4px;">
+        <div style="font-size:20px;font-weight:700;">Plano de Estudos e Simulado</div>
+        <div style="font-size:12px;color:#475569;margin-top:4px;">
+          Disciplina: ${esc(d.disciplina)} · ${esc(d.dias_ate_prova)} dias até a prova · ${esc(d.horas_por_dia)}h por dia
+        </div>
+        <h2 style="${h2}">1. Resumo Estruturado</h2>
+        <div style="font-weight:600;font-size:14px;">${esc(resumo.titulo)}</div>
+        <div style="font-size:12px;margin:4px 0 12px;">${esc(resumo.visao_geral)}</div>
+        ${topicos}
+        <h2 style="${h2}">2. Simulado</h2>
+        ${objetivas}
+        ${discursivas}
+        <h2 style="${h2}">3. Gabarito Comentado</h2>
+        ${gabarito}
+        <h2 style="${h2}">4. Cronograma de Estudos</h2>
+        <div style="font-size:12px;margin-bottom:10px;">${esc(cronograma.resumo_estrategia)}</div>
+        ${dias}
+      </div>`;
+  }
+
+  async baixarPdf() {
     if (!this.currentData) {
-      alert("Nenhum dado gerado para exportar.");
+      alert("Nenhum resultado gerado para baixar.");
       return;
     }
-    const d = this.currentData;
-    let md = `# Plano de Estudos e Simulado Acadêmico\n`;
-    md += `**Disciplina:** ${d.disciplina}\n`;
-    md += `**Tempo até a prova:** ${d.dias_ate_prova} dias (${d.horas_por_dia}h/dia)\n\n`;
-    
-    md += `## 1. Resumo Estruturado\n${d.resumo.visao_geral}\n\n`;
-    d.resumo.topicos.forEach(t => {
-      md += `### ${t.nome} [Complexidade: ${t.complexidade}]\n`;
-      md += `${t.definicao}\n`;
-      (t.pontos_criticos || []).forEach(p => md += `- ${p}\n`);
-      md += `\n`;
-    });
-
-    md += `## 2. Simulado da Banca\n`;
-    d.simulado.questoes_multipla_escolha.forEach((q, idx) => {
-      md += `**Questão ${idx + 1}:** ${q.enunciado}\n`;
-      for (const [letra, txt] of Object.entries(q.alternativas)) {
-        md += `- (${letra}) ${txt}\n`;
-      }
-      md += `*Gabarito:* ${q.resposta_correta} - ${q.explicacao}\n\n`;
-    });
-
-    md += `## 3. Cronograma de Revisão Espaçada\n`;
-    d.cronograma.dias.forEach(dia => {
-      md += `### Dia ${dia.dia}: ${dia.foco_principal} (${dia.horas_previstas}h)\n`;
-      (dia.atividades || []).forEach(a => md += `- ${a}\n`);
-      md += `\n`;
-    });
-
-    const blob = new Blob([md], {type: 'text/markdown;charset=utf-8'});
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `plano_estudos_${Date.now()}.md`;
-    link.click();
+    if (typeof html2pdf === 'undefined') {
+      alert("Não foi possível carregar o gerador de PDF. Verifique a conexão com a internet.");
+      return;
+    }
+    const btn = document.getElementById('btn-download');
+    btn.disabled = true;
+    btn.textContent = 'Gerando PDF...';
+    try {
+      const nome = (this.currentData.disciplina || 'plano_estudos')
+        .normalize('NFD').replace(/[̀-ͯ]/g, '')
+        .replace(/[^a-zA-Z0-9]+/g, '_').replace(/^_|_$/g, '').toLowerCase();
+      await html2pdf().set({
+        margin: [12, 12, 14, 12],
+        filename: `${nome || 'plano_estudos'}.pdf`,
+        image: { type: 'jpeg', quality: 0.95 },
+        // scrollX/scrollY = 0 evita espaço em branco no topo quando a página está rolada
+        html2canvas: { scale: 2, scrollX: 0, scrollY: 0 },
+        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+        pagebreak: { mode: ['css', 'legacy'] }
+      }).from(this.montarHtmlPdf()).save();
+    } catch (e) {
+      alert(`Falha ao gerar o PDF: ${e.message}`);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Download';
+    }
   }
 }
 
-// Inicializa a aplicação quando o DOM estiver pronto
 document.addEventListener('DOMContentLoaded', () => {
   window.app = new StudyApp();
 });

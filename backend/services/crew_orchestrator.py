@@ -32,6 +32,7 @@ def run_study_crew(
     disciplina: str,
     dias_ate_prova: int,
     horas_por_dia: float,
+    num_questoes: int = 5,
     provider: str = "demo",
     model_name: Optional[str] = None,
     progress_callback: Optional[Callable[[int, str], None]] = None
@@ -42,6 +43,9 @@ def run_study_crew(
     2. Agente 2 - Elaborador de Banca Examinadora
     3. Agente 3 - Tutor de Revisão Espaçada
     """
+    # O simulado tem entre 5 e 10 questões objetivas
+    num_questoes = max(5, min(10, int(num_questoes or 5)))
+
     if provider.lower() == "demo":
         if progress_callback:
             progress_callback(1, "1. Sintetizando conteúdo acadêmico (Modo Demonstração Instantâneo)...")
@@ -53,6 +57,9 @@ def run_study_crew(
         result["disciplina"] = disciplina or DEMO_DATA["disciplina"]
         result["dias_ate_prova"] = dias_ate_prova or DEMO_DATA["dias_ate_prova"]
         result["horas_por_dia"] = horas_por_dia or DEMO_DATA["horas_por_dia"]
+        simulado_demo = dict(DEMO_DATA["simulado"])
+        simulado_demo["questoes_multipla_escolha"] = DEMO_DATA["simulado"]["questoes_multipla_escolha"][:num_questoes]
+        result["simulado"] = simulado_demo
         return result
 
     # Configura LLM real para CrewAI
@@ -102,7 +109,7 @@ def run_study_crew(
     # Agente 2: Elaborador de Banca Examinadora
     agente_banca = Agent(
         role="Professor Universitário e Projetista de Avaliações Acadêmicas",
-        goal=f"Criar um simulado avaliativo rigoroso e inédito para a disciplina '{disciplina}', contendo 5 questões objetivas com 4 alternativas (A, B, C, D) e 2 questões discursivas com gabarito comentado fundamentado no resumo.",
+        goal=f"Criar um simulado avaliativo rigoroso e inédito para a disciplina '{disciplina}', contendo {num_questoes} questões objetivas com 4 alternativas (A, B, C, D) e 2 questões discursivas com gabarito comentado fundamentado no resumo.",
         backstory=(
             "Você é o presidente da banca de elaboração de provas da universidade. Seu rigor na construção "
             "de enunciados contextualizados, distratores plausíveis e gabaritos comentados esclarecedores "
@@ -115,7 +122,7 @@ def run_study_crew(
     tarefa_simulado = Task(
         description=(
             "Com base no resumo estruturado gerado pelo Agente 1, elabore um simulado inédito contendo:\n"
-            "- 5 questões de múltipla escolha (alternativas A, B, C, D) com enunciado contextualizado, identificação da alternativa correta e explicação detalhada da justificativa da correta e do erro dos distratores.\n"
+            f"- Exatamente {num_questoes} questões de múltipla escolha (alternativas A, B, C, D) com enunciado contextualizado, identificação da alternativa correta e explicação detalhada da justificativa da correta e do erro dos distratores.\n"
             "- 2 questões discursivas conceituais com a 'resposta_esperada' completa do professor.\n\n"
             "Gere a saída estritamente em formato JSON estruturado sob a chave 'simulado':\n"
             "{\n"
@@ -138,7 +145,7 @@ def run_study_crew(
             "}\n"
             "Responda estritamente com o JSON válido."
         ),
-        expected_output="JSON estruturado contendo 'simulado' com as 5 questões objetivas e 2 discursivas gabaritadas.",
+        expected_output=f"JSON estruturado contendo 'simulado' com as {num_questoes} questões objetivas e 2 discursivas gabaritadas.",
         agent=agente_banca
     )
 
