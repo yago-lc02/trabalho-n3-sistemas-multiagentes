@@ -12,26 +12,36 @@ logger = logging.getLogger(__name__)
 # limite de requisições por minuto do plano gratuito do Gemini.
 _crew_lock = threading.Lock()
 
+# Regra extra para os agentes: símbolos em LaTeX (\forall, \in...) quebram o JSON
+REGRA_JSON = (
+    "\nIMPORTANTE: responda somente com o JSON, sem texto antes ou depois. "
+    "Não use LaTeX nem barras invertidas; escreva símbolos matemáticos "
+    "diretamente em Unicode (ex.: ∀, ∃, ∈, ≠, ≤, ⇒)."
+)
+
+
 def clean_json_output(raw_text: str) -> Dict[str, Any]:
-    """Limpa blocos markdown ```json ... ``` caso a LLM retorne envolto em markdown."""
+    """Converte a resposta do agente em dict, tolerando markdown e JSON malformado."""
     text = raw_text.strip()
-    if text.startswith("```json"):
-        text = text[7:]
-    elif text.startswith("```"):
-        text = text[3:]
-    if text.endswith("```"):
-        text = text[:-3]
-    text = text.strip()
+    # Remove cercas ```json ... ``` e qualquer texto fora do objeto JSON
+    start = text.find("{")
+    end = text.rfind("}")
+    if start != -1 and end > start:
+        text = text[start:end + 1]
+
     try:
-        return json.loads(text)
+        # strict=False aceita quebras de linha literais dentro das strings
+        return json.loads(text, strict=False)
     except json.JSONDecodeError as err:
-        logger.error(f"Erro ao decodificar JSON gerado pelo agente: {err}\nTexto bruto: {raw_text}")
-        # Tenta extrair a substring entre o primeiro { e o último }
-        start = text.find("{")
-        end = text.rfind("}")
-        if start != -1 and end != -1:
-            return json.loads(text[start:end+1])
-        raise err
+        logger.warning(f"JSON inválido do agente ({err}); tentando reparar.")
+
+    # Repara barras invertidas soltas, vírgulas sobrando, aspas faltando etc.
+    from json_repair import repair_json
+    reparado = repair_json(text, return_objects=True)
+    if isinstance(reparado, dict) and reparado:
+        return reparado
+    logger.error(f"Não foi possível reparar o JSON do agente. Texto bruto: {raw_text[:2000]}")
+    raise ValueError("Resposta do agente não é um JSON válido.")
 
 def run_study_crew(
     texto_material: str,
@@ -107,6 +117,7 @@ def run_study_crew(
             '  ]\n'
             "}\n"
             "Responda estritamente com o JSON válido, sem comentários adicionais."
+            + REGRA_JSON
         ),
         expected_output="JSON estruturado contendo 'resumo' com titulo, visao_geral e lista de topicos classificados.",
         agent=agente_sintetizador
@@ -128,7 +139,7 @@ def run_study_crew(
     tarefa_simulado = Task(
         description=(
             "Com base no resumo estruturado gerado pelo Agente 1, elabore um simulado inédito contendo:\n"
-            f"- Exatamente {num_questoes} questões de múltipla escolha (alternativas A, B, C, D) com enunciado contextualizado, identificação da alternativa correta e explicação detalhada da justificativa da correta e do erro dos distratores.\n"
+            f"- EXATAMENTE {num_questoes} questões de múltipla escolha, nem mais nem menos (alternativas A, B, C, D) com enunciado contextualizado, identificação da alternativa correta e explicação detalhada da justificativa da correta e do erro dos distratores.\n"
             "- 2 questões discursivas conceituais com a 'resposta_esperada' completa do professor.\n\n"
             "Gere a saída estritamente em formato JSON estruturado sob a chave 'simulado':\n"
             "{\n"
@@ -149,7 +160,9 @@ def run_study_crew(
             '    }\n'
             '  ]\n'
             "}\n"
+            f"A lista 'questoes_multipla_escolha' deve ter exatamente {num_questoes} itens. "
             "Responda estritamente com o JSON válido."
+            + REGRA_JSON
         ),
         expected_output=f"JSON estruturado contendo 'simulado' com as {num_questoes} questões objetivas e 2 discursivas gabaritadas.",
         agent=agente_banca
@@ -189,6 +202,7 @@ def run_study_crew(
             '  ]\n'
             "}\n"
             "Responda estritamente com o JSON válido."
+            + REGRA_JSON
         ),
         expected_output="JSON estruturado contendo 'cronograma' detalhando cada dia até a prova.",
         agent=agente_tutor
@@ -235,6 +249,14 @@ def run_study_crew(
             + ", ".join(nomes[c] for c in faltando)
             + ". Tente processar novamente."
         )
+
+    # Garante o número de questões escolhido pelo usuário
+    simulado = parsed_result["simulado"]
+    objetivas = simulado.get("questoes_multipla_escolha") or []
+    if len(objetivas) != num_questoes:
+        logger.warning(f"Agente gerou {len(objetivas)} questões objetivas; solicitadas: {num_questoes}.")
+    simulado["questoes_multipla_escolha"] = objetivas[:num_questoes]
+    simulado["questoes_discursivas"] = (simulado.get("questoes_discursivas") or [])[:2]
 
     final_output = {
         "disciplina": disciplina,

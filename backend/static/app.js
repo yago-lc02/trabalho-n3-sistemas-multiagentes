@@ -202,7 +202,6 @@ class StudyApp {
     document.getElementById('resumo-visao-geral').textContent = resumo.visao_geral || "";
 
     const topicos = resumo.topicos || [];
-    document.getElementById('badge-topicos').textContent = topicos.length;
     const listaTopicosEl = document.getElementById('lista-topicos');
     listaTopicosEl.innerHTML = '';
 
@@ -244,7 +243,8 @@ class StudyApp {
     containerObj.innerHTML = '';
     document.getElementById('box-pontuacao').classList.add('hidden');
     document.getElementById('pontos-total').textContent = questoesObj.length;
-    document.getElementById('badge-simulado').textContent = `${questoesObj.length + questoesDisc.length} Qs`;
+    // Mostra o número de questões objetivas, o mesmo que o usuário escolhe no formulário
+    document.getElementById('badge-simulado').textContent = `${questoesObj.length} Qs`;
     document.getElementById('simulado-descricao').textContent =
       `${questoesObj.length} questões objetivas com correção automática + ${questoesDisc.length} questões discursivas.`;
 
