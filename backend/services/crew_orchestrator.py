@@ -126,7 +126,7 @@ def run_study_crew(
     # Agente 2: Elaborador de Banca Examinadora
     agente_banca = Agent(
         role="Professor Universitário e Projetista de Avaliações Acadêmicas",
-        goal=f"Criar um simulado avaliativo rigoroso e inédito para a disciplina '{disciplina}', contendo {num_questoes} questões objetivas com 4 alternativas (A, B, C, D) e 2 questões discursivas com gabarito comentado fundamentado no resumo.",
+        goal=f"Criar um simulado avaliativo rigoroso e inédito para a disciplina '{disciplina}', contendo {num_questoes} questões objetivas com 4 alternativas (A, B, C, D) e gabarito comentado fundamentado no resumo.",
         backstory=(
             "Você é o presidente da banca de elaboração de provas da universidade. Seu rigor na construção "
             "de enunciados contextualizados, distratores plausíveis e gabaritos comentados esclarecedores "
@@ -140,7 +140,7 @@ def run_study_crew(
         description=(
             "Com base no resumo estruturado gerado pelo Agente 1, elabore um simulado inédito contendo:\n"
             f"- EXATAMENTE {num_questoes} questões de múltipla escolha, nem mais nem menos (alternativas A, B, C, D) com enunciado contextualizado, identificação da alternativa correta e explicação detalhada da justificativa da correta e do erro dos distratores.\n"
-            "- 2 questões discursivas conceituais com a 'resposta_esperada' completa do professor.\n\n"
+            "- NÃO inclua questões discursivas: o simulado é composto somente pelas questões objetivas.\n\n"
             "Gere a saída estritamente em formato JSON estruturado sob a chave 'simulado':\n"
             "{\n"
             '  "questoes_multipla_escolha": [\n'
@@ -151,20 +151,13 @@ def run_study_crew(
             '      "resposta_correta": "A" | "B" | "C" | "D",\n'
             '      "explicacao": "..."\n'
             '    }\n'
-            '  ],\n'
-            '  "questoes_discursivas": [\n'
-            '    {\n'
-            '      "id": 1,\n'
-            '      "enunciado": "...",\n'
-            '      "resposta_esperada": "..."\n'
-            '    }\n'
             '  ]\n'
             "}\n"
             f"A lista 'questoes_multipla_escolha' deve ter exatamente {num_questoes} itens. "
             "Responda estritamente com o JSON válido."
             + REGRA_JSON
         ),
-        expected_output=f"JSON estruturado contendo 'simulado' com as {num_questoes} questões objetivas e 2 discursivas gabaritadas.",
+        expected_output=f"JSON estruturado contendo 'simulado' com as {num_questoes} questões objetivas gabaritadas.",
         agent=agente_banca
     )
 
@@ -256,7 +249,7 @@ def run_study_crew(
     if len(objetivas) != num_questoes:
         logger.warning(f"Agente gerou {len(objetivas)} questões objetivas; solicitadas: {num_questoes}.")
     simulado["questoes_multipla_escolha"] = objetivas[:num_questoes]
-    simulado["questoes_discursivas"] = (simulado.get("questoes_discursivas") or [])[:2]
+    simulado.pop("questoes_discursivas", None)
 
     final_output = {
         "disciplina": disciplina,

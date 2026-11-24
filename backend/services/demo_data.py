@@ -128,18 +128,6 @@ DEMO_DATA = {
                 "resposta_correta": "B",
                 "explicacao": "O Trace ID (identificador de correlação) é propagado nos cabeçalhos HTTP/gRPC por toda a cadeia de chamadas, permitindo reunir em ferramentas como Jaeger ou Zipkin a linha do tempo exata de cada span de processamento através dos múltiplos nós da rede."
             }
-        ],
-        "questoes_discursivas": [
-            {
-                "id": 1,
-                "enunciado": "Explique a diferença fundamental entre transações distribuídas baseadas em Two-Phase Commit (2PC) e o Padrão Saga (Saga Pattern) em arquiteturas de microsserviços. Destaque por que o padrão Saga é preferido na computação em nuvem moderna.",
-                "resposta_esperada": "O Two-Phase Commit (2PC) é um protocolo síncrono e bloqueante que tenta estender transações ACID para múltiplos nós através de um coordenador de transação. Embora garanta consistência estrita, introduz alto acoplamento temporal, péssima escalabilidade e ponto único de falha, bloqueando recursos enquanto aguarda a votação de todos os serviços.\n\nJá o Padrão Saga decompõe a transação de negócio em uma sequência de transações locais em cada serviço participante, operando sob o paradigma de Consistência Eventual. Cada etapa comita suas alterações locais imediatamente. Caso ocorra uma falha em qualquer passo intermediário, o padrão aciona transações de compensação (compensating transactions) que desfazem semanticamente as ações anteriores (ex: estornar crédito reservado).\n\nO padrão Saga é o preferido em nuvem porque não bloqueia recursos, escala de forma horizontal e mantém a tolerância a falhas distribuída."
-            },
-            {
-                "id": 2,
-                "enunciado": "Em estratégias de teste para microsserviços, diferencie Testes de Integração tradicionais de Testes de Contrato Orientados pelo Consumidor (Consumer-Driven Contract Testing). Qual problema prático o teste de contrato resolve no pipeline de CI/CD?",
-                "resposta_esperada": "Testes de Integração tradicionais normalmente exigem que múltiplos serviços estejam instanciados e conectados em um ambiente de homologação conjunto, verificando se a comunicação de ponta a ponta é bem-sucedida. Isso gera ambientes instáveis, lentos e dependências difíceis de orquestrar no CI/CD.\n\nOs Testes de Contrato (ex: com framework Pact) verificam se um Provedor e um Consumidor de API concordam estritamente sobre a estrutura de mensagens (payload, cabeçalhos e códigos HTTP), mas sem a necessidade de rodar os dois serviços juntos em tempo real. O Consumidor define as expectativas em um arquivo de contrato, e o Provedor valida se sua implementação atende àquele contrato de forma isolada e desacoplada.\n\nO teste de contrato resolve o problema prático de detectar quebras de compatibilidade de APIs prematuramente na esteira de integração contínua (CI/CD), antes do deploy em produção e sem a lentidão ou instabilidade de ambientes integrados pesados."
-            }
         ]
     },
     "cronograma": {
@@ -176,14 +164,14 @@ DEMO_DATA = {
             {
                 "dia": 3,
                 "horas_previstas": 2.5,
-                "foco_principal": "Transações Distribuídas e Prática Discursiva",
+                "foco_principal": "Transações Distribuídas e Revisão Prática",
                 "topicos_alvo": [
                     "Padrão Saga (Orquestrada vs Coreografada)",
                     "Transações de Compensação e Consistência Eventual"
                 ],
                 "atividades": [
                     "Comparação técnica detalhada entre 2PC e Saga Pattern (60 min)",
-                    "Redação e simulação da Questão Discursiva 1 sem consulta prévia (45 min)",
+                    "Revisão escrita sobre 2PC versus Padrão Saga sem consulta prévia (45 min)",
                     "Comparação da resposta redigida com a resposta esperada oficial e ajuste dos pontos fracos (45 min)"
                 ]
             },
@@ -197,7 +185,7 @@ DEMO_DATA = {
                 ],
                 "atividades": [
                     "Fixação da proporção de testes unitários, testes de contrato e E2E (50 min)",
-                    "Redação da Questão Discursiva 2 sobre Testes de Contrato (40 min)",
+                    "Revisão escrita sobre Testes de Contrato (40 min)",
                     "Estudo dos pilares de observabilidade e resolução das questões 4 e 5 do simulado (60 min)"
                 ]
             },

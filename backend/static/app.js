@@ -238,7 +238,6 @@ class StudyApp {
     // 2. Simulado
     const simulado = data.simulado || {};
     const questoesObj = simulado.questoes_multipla_escolha || [];
-    const questoesDisc = simulado.questoes_discursivas || [];
     const containerObj = document.getElementById('lista-questoes-objetivas');
     containerObj.innerHTML = '';
     document.getElementById('box-pontuacao').classList.add('hidden');
@@ -246,7 +245,7 @@ class StudyApp {
     // Mostra o número de questões objetivas, o mesmo que o usuário escolhe no formulário
     document.getElementById('badge-simulado').textContent = `${questoesObj.length} Qs`;
     document.getElementById('simulado-descricao').textContent =
-      `${questoesObj.length} questões objetivas com correção automática + ${questoesDisc.length} questões discursivas.`;
+      `${questoesObj.length} questões objetivas com correção automática.`;
 
     questoesObj.forEach((q, idx) => {
       const qDiv = document.createElement('div');
@@ -277,28 +276,6 @@ class StudyApp {
       containerObj.appendChild(qDiv);
     });
 
-    const containerDisc = document.getElementById('lista-questoes-discursivas');
-    containerDisc.innerHTML = '';
-
-    questoesDisc.forEach((qd, idx) => {
-      const discDiv = document.createElement('div');
-      discDiv.className = "border border-slate-200 rounded-lg p-5 bg-white shadow-sm space-y-3";
-      discDiv.innerHTML = `
-        <div class="flex items-center justify-between">
-          <span class="text-sm font-bold text-slate-800">Questão Discursiva ${idx + 1}</span>
-          <button onclick="window.app.toggleRespostaEsperada(${idx})" class="text-sm text-[#1E3A8A] hover:underline font-medium">
-            Ver resposta esperada
-          </button>
-        </div>
-        <p class="text-base text-slate-800 leading-relaxed font-medium">${esc(qd.enunciado)}</p>
-        <textarea rows="3" placeholder="Redija seu rascunho de resposta aqui para fixação..."
-          class="w-full text-sm p-3 border border-slate-200 rounded focus:border-slate-800 focus:outline-none"></textarea>
-        <div id="resp-disc-${idx}" class="hidden p-3 bg-slate-50 border border-slate-200 rounded text-sm text-slate-700 whitespace-pre-line leading-relaxed">
-          <strong class="block text-slate-900 mb-1">Gabarito Conceitual do Professor:</strong>${esc(qd.resposta_esperada)}
-        </div>
-      `;
-      containerDisc.appendChild(discDiv);
-    });
 
     // 3. Cronograma
     const cronograma = data.cronograma || {};
@@ -395,11 +372,6 @@ class StudyApp {
     document.getElementById('box-pontuacao').classList.remove('hidden');
   }
 
-  toggleRespostaEsperada(idx) {
-    const el = document.getElementById(`resp-disc-${idx}`);
-    if (el) el.classList.toggle('hidden');
-  }
-
   montarHtmlPdf() {
     const d = this.currentData;
     const resumo = d.resumo || {};
@@ -422,16 +394,9 @@ class StudyApp {
         ${Object.entries(q.alternativas || {}).map(([l, t]) => `<div style="font-size:12px;margin:2px 0 2px 10px;"><b>${esc(l)})</b> ${esc(t)}</div>`).join('')}
       </div>`).join('');
 
-    const discursivas = (simulado.questoes_discursivas || []).map((q, i) => `
-      <div style="${bloco}">
-        <div style="font-weight:600;font-size:13px;">Questão Discursiva ${i + 1}</div>
-        <div style="font-size:13px;margin-top:3px;">${esc(q.enunciado)}</div>
-      </div>`).join('');
 
     const gabarito = (simulado.questoes_multipla_escolha || []).map((q, i) => `
-      <div style="${bloco}font-size:12px;"><b>Questão ${i + 1}: ${esc(q.resposta_correta)}</b> — ${esc(q.explicacao)}</div>`).join('')
-      + (simulado.questoes_discursivas || []).map((q, i) => `
-      <div style="${bloco}font-size:12px;white-space:pre-line;"><b>Discursiva ${i + 1}:</b> ${esc(q.resposta_esperada)}</div>`).join('');
+      <div style="${bloco}font-size:12px;"><b>Questão ${i + 1}: ${esc(q.resposta_correta)}</b> — ${esc(q.explicacao)}</div>`).join('');
 
     const dias = (cronograma.dias || []).map(dia => `
       <div style="${bloco}">
@@ -451,7 +416,6 @@ class StudyApp {
         ${topicos}
         <h2 style="${h2}">2. Simulado</h2>
         ${objetivas}
-        ${discursivas}
         <h2 style="${h2}">3. Gabarito Comentado</h2>
         ${gabarito}
         <h2 style="${h2}">4. Cronograma de Estudos</h2>
