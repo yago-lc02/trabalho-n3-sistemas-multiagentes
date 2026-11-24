@@ -125,17 +125,17 @@ class StudyApp {
     barra.style.width = '20%';
     statusTxt.textContent = "Iniciando Agente 1 (Sintetizador)...";
 
+    // O processamento com o Gemini leva de 30s a alguns minutos: mostra o tempo decorrido
+    const inicio = Date.now();
     const timer = setInterval(() => {
-      const currentW = parseInt(barra.style.width) || 20;
-      if (currentW < 85) {
-        barra.style.width = (currentW + 15) + '%';
-        if (currentW > 30 && currentW <= 60) {
-          statusTxt.textContent = "Agente 2 (Banca Examinadora) elaborando questões...";
-        } else if (currentW > 60) {
-          statusTxt.textContent = "Agente 3 (Tutor Espaçado) construindo cronograma...";
-        }
-      }
-    }, 400);
+      const seg = Math.round((Date.now() - inicio) / 1000);
+      const largura = Math.min(90, 20 + seg * 0.6);
+      barra.style.width = largura + '%';
+      let etapa = "Agente 1 (Sintetizador) analisando o material";
+      if (largura > 45) etapa = "Agente 2 (Banca Examinadora) elaborando questões";
+      if (largura > 70) etapa = "Agente 3 (Tutor Espaçado) construindo cronograma";
+      statusTxt.textContent = `${etapa}... ${seg}s (pode levar alguns minutos)`;
+    }, 1000);
 
     try {
       let resp;

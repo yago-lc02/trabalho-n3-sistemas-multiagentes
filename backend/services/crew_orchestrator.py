@@ -1,10 +1,16 @@
 import json
 import logging
+import os
+import threading
 from typing import Dict, Any, Callable, Optional
 from backend.services.demo_data import DEMO_DATA
 from backend.services.llm_factory import get_llm_instance
 
 logger = logging.getLogger(__name__)
+
+# Processa um material por vez: evita que execuções simultâneas estourem o
+# limite de requisições por minuto do plano gratuito do Gemini.
+_crew_lock = threading.Lock()
 
 def clean_json_output(raw_text: str) -> Dict[str, Any]:
     """Limpa blocos markdown ```json ... ``` caso a LLM retorne envolto em markdown."""
@@ -188,15 +194,20 @@ def run_study_crew(
         agent=agente_tutor
     )
 
+    # Limite de chamadas por minuto ao LLM (plano gratuito do Gemini: 5/min)
+    max_rpm = int(os.getenv("LLM_MAX_RPM", "4")) if provider.lower() == "gemini" else None
+
     # Execução sequencial da Crew
     crew = Crew(
         agents=[agente_sintetizador, agente_banca, agente_tutor],
         tasks=[tarefa_sintese, tarefa_simulado, tarefa_cronograma],
         process=Process.sequential,
+        max_rpm=max_rpm,
         verbose=True
     )
 
-    crew.kickoff()
+    with _crew_lock:
+        crew.kickoff()
 
     # A saída final da Crew contém só a última tarefa (cronograma).
     # Por isso consolidamos o JSON de cada uma das 3 tarefas individualmente.
@@ -214,17 +225,23 @@ def run_study_crew(
         except Exception as task_err:
             logger.error(f"Erro ao extrair JSON da tarefa '{chave}': {task_err}")
 
-    for chave in ("resumo", "simulado", "cronograma"):
-        if chave not in parsed_result:
-            logger.warning(f"Chave '{chave}' ausente na saída dos agentes; usando dados de demonstração.")
+    # Sem dados de demonstração no lugar do resultado real: se algum agente
+    # não devolveu JSON válido, avisa o usuário em vez de mostrar conteúdo falso.
+    faltando = [chave for chave in ("resumo", "simulado", "cronograma") if chave not in parsed_result]
+    if faltando:
+        nomes = {"resumo": "resumo", "simulado": "simulado", "cronograma": "cronograma"}
+        raise ValueError(
+            "Os agentes não retornaram uma resposta válida para: "
+            + ", ".join(nomes[c] for c in faltando)
+            + ". Tente processar novamente."
+        )
 
-    # Garante estrutura padronizada
     final_output = {
         "disciplina": disciplina,
         "dias_ate_prova": dias_ate_prova,
         "horas_por_dia": horas_por_dia,
-        "resumo": parsed_result.get("resumo", DEMO_DATA["resumo"]),
-        "simulado": parsed_result.get("simulado", DEMO_DATA["simulado"]),
-        "cronograma": parsed_result.get("cronograma", DEMO_DATA["cronograma"]),
+        "resumo": parsed_result["resumo"],
+        "simulado": parsed_result["simulado"],
+        "cronograma": parsed_result["cronograma"],
     }
     return final_output

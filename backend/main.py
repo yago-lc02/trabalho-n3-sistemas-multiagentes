@@ -44,6 +44,17 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+def _erro_http(e: Exception, prefixo: str = "") -> HTTPException:
+    """Converte erros do LLM em respostas claras para o usuário."""
+    msg = str(e)
+    if "429" in msg or "RESOURCE_EXHAUSTED" in msg or "quota" in msg.lower() or "rate limit" in msg.lower():
+        return HTTPException(
+            status_code=429,
+            detail="Limite de requisições do Gemini atingido (o plano gratuito permite 5 por minuto). "
+                   "Aguarde cerca de 1 minuto e tente novamente."
+        )
+    return HTTPException(status_code=500, detail=f"{prefixo}{msg}")
+
 class StudyTextRequest(BaseModel):
     disciplina: str
     dias_ate_prova: int = 5
@@ -103,7 +114,7 @@ async def processar_texto(payload: StudyTextRequest):
         return resultado
     except Exception as e:
         logger.error(f"Erro ao processar texto com CrewAI: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise _erro_http(e)
 
 @app.post("/api/processar-pdf")
 async def processar_pdf(
@@ -141,7 +152,7 @@ async def processar_pdf(
         raise
     except Exception as e:
         logger.error(f"Erro ao processar PDF: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Erro interno ao processar material: {str(e)}")
+        raise _erro_http(e, "Erro interno ao processar material: ")
 
 # Monta diretório estático do frontend
 static_path = os.path.join(os.path.dirname(__file__), "static")
