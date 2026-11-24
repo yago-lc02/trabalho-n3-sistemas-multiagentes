@@ -1,20 +1,30 @@
 import os
 import io
+import sys
 import json
 import logging
+
+# Evita erro 'charmap' no console do Windows com os emojis dos logs do CrewAI
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
 from typing import Optional
 from dotenv import load_dotenv
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import JSONResponse, FileResponse
+from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel
 
 from backend.services.pdf_extractor import extract_text_from_pdf
 from backend.services.crew_orchestrator import run_study_crew
 from backend.services.demo_data import DEMO_DATA
 
-load_dotenv()
+# Carrega backend/.env pelo caminho absoluto (independe do diretório de execução)
+load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 logger = logging.getLogger("api")
@@ -79,7 +89,9 @@ async def processar_texto(payload: StudyTextRequest):
         provider = payload.provider or os.getenv("LLM_PROVIDER", "demo")
         model = payload.model_name
         
-        resultado = run_study_crew(
+        # CrewAI é síncrono: executa em thread separada para não bloquear o event loop
+        resultado = await run_in_threadpool(
+            run_study_crew,
             texto_material=payload.texto_material,
             disciplina=payload.disciplina,
             dias_ate_prova=payload.dias_ate_prova,
@@ -112,7 +124,8 @@ async def processar_pdf(
             raise HTTPException(status_code=400, detail="Não foi possível extrair texto do PDF (pode ser imagem digitalizada sem OCR).")
         
         chosen_provider = provider or os.getenv("LLM_PROVIDER", "demo")
-        resultado = run_study_crew(
+        resultado = await run_in_threadpool(
+            run_study_crew,
             texto_material=texto_extraido,
             disciplina=disciplina,
             dias_ate_prova=dias_ate_prova,
