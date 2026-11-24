@@ -126,6 +126,7 @@ O sistema conta com um **seletor no topo da tela** permitindo alternar de forma 
      2. Baixe o modelo usado pelo projeto: `ollama pull llama3.2`.
      3. No app, escolha **Ollama Local / Offline** no seletor do topo. Não é preciso reiniciar o servidor.
    - Para usar outro modelo (ex.: `qwen2.5:7b`, melhor em português, mas exige uns 16 GB de RAM), baixe-o com `ollama pull` e ajuste `OLLAMA_MODEL` no `backend/.env`.
+   - Ao escolher o modo Ollama no seletor, o sistema já começa a carregar o modelo na memória e o mantém carregado por 30 minutos (`OLLAMA_KEEP_ALIVE` no `.env`). Por isso, escolha o modo alguns segundos antes de processar.
    - Roda inteiramente no computador, então é bem mais lento que o Gemini (pode levar alguns minutos sem placa de vídeo), e modelos pequenos às vezes devolvem respostas fora do formato esperado.
 
 3. **Modo Nuvem (Google Gemini):**

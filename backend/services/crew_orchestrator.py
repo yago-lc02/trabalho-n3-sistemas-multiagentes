@@ -44,6 +44,27 @@ def clean_json_output(raw_text: str) -> Dict[str, Any]:
     logger.error(f"Não foi possível reparar o JSON do agente. Texto bruto: {raw_text[:2000]}")
     raise ValueError("Resposta do agente não é um JSON válido.")
 
+def _normalizar_formato(chave: str, valor: Any) -> Optional[Dict[str, Any]]:
+    """
+    Modelos menores (ex.: llama3.2 no Ollama) às vezes devolvem só a lista,
+    sem o objeto esperado. Ex.: "simulado": [questões] em vez de
+    "simulado": {"questoes_multipla_escolha": [questões]}.
+    Aqui encaixamos esses formatos na estrutura que o sistema usa.
+    """
+    if chave == "simulado":
+        if isinstance(valor, list):
+            return {"questoes_multipla_escolha": valor}
+        if isinstance(valor, dict) and "questoes_multipla_escolha" not in valor:
+            lista = valor.get("questoes") or valor.get("questoes_objetivas")
+            if isinstance(lista, list):
+                return {"questoes_multipla_escolha": lista}
+    if chave == "cronograma" and isinstance(valor, list):
+        return {"resumo_estrategia": "", "dias": valor}
+    if chave == "resumo" and isinstance(valor, list):
+        return {"titulo": "", "visao_geral": "", "topicos": valor}
+    return valor if isinstance(valor, dict) else None
+
+
 def run_study_crew(
     texto_material: str,
     disciplina: str,
@@ -242,9 +263,14 @@ def run_study_crew(
         try:
             task_json = clean_json_output(raw)
             if isinstance(task_json, dict) and chave in task_json:
-                parsed_result[chave] = task_json[chave]
+                valor = task_json[chave]
             elif isinstance(task_json, dict) and task_json:
-                parsed_result[chave] = task_json
+                valor = task_json
+            else:
+                continue
+            valor = _normalizar_formato(chave, valor)
+            if valor:
+                parsed_result[chave] = valor
         except Exception as task_err:
             logger.error(f"Erro ao extrair JSON da tarefa '{chave}': {task_err}")
 

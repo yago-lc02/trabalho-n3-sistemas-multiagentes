@@ -26,6 +26,11 @@ class StudyApp {
 
   mudarProvedor(val) {
     this.providerAtual = val;
+    // No modo Ollama, já começa a carregar o modelo no computador enquanto
+    // o usuário preenche o formulário (o primeiro carregamento é demorado).
+    if (val === 'ollama') {
+      fetch('/api/ollama/aquecer', { method: 'POST' }).catch(() => {});
+    }
   }
 
   configurarArrastarSoltar() {

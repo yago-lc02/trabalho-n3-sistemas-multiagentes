@@ -110,6 +110,39 @@ async def get_demo_data():
     """Retorna os dados demonstrativos pré-carregados para renderização imediata da interface."""
     return DEMO_DATA
 
+def _aquecer_ollama():
+    """Carrega o modelo na memória/placa de vídeo e faz uma geração mínima de aquecimento."""
+    import requests
+    base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434").rstrip("/")
+    modelo = os.getenv("OLLAMA_MODEL", "llama3.2")
+    try:
+        requests.post(
+            f"{base_url}/api/generate",
+            json={
+                "model": modelo,
+                "prompt": "ok",
+                "stream": False,
+                # Mantém o modelo carregado por 30 min (o padrão do Ollama é 5 min)
+                "keep_alive": os.getenv("OLLAMA_KEEP_ALIVE", "30m"),
+                "options": {"num_predict": 1},
+            },
+            timeout=300,
+        )
+        logger.info(f"Modelo '{modelo}' do Ollama carregado e aquecido.")
+    except Exception as e:
+        logger.warning(f"Não foi possível pré-carregar o modelo do Ollama: {e}")
+
+
+@app.post("/api/ollama/aquecer")
+async def aquecer_ollama(background_tasks: BackgroundTasks):
+    """
+    Chamado pelo front quando o usuário escolhe o modo Ollama: o modelo começa a
+    carregar enquanto o formulário é preenchido, em vez de só na hora de processar.
+    """
+    background_tasks.add_task(_aquecer_ollama)
+    return {"status": "carregando"}
+
+
 @app.post("/api/processar-texto")
 async def processar_texto(payload: StudyTextRequest):
     """Processa o material acadêmico enviado como texto puro através da orquestração CrewAI."""
