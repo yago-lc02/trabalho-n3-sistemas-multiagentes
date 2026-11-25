@@ -41,12 +41,17 @@ def get_llm_instance(provider: str, model_name: Optional[str] = None):
         if not api_key:
             raise ValueError("GEMINI_API_KEY não configurada no arquivo .env ou no painel.")
         chosen_model = model_name or os.getenv("GEMINI_MODEL_NAME", "gemini-2.5-flash")
-        logger.info(f"Usando Google Gemini ({chosen_model}) via endpoint compatível com OpenAI")
+        # O Gemini 2.5 "pensa" antes de responder por padrão, o que deixa cada
+        # chamada bem mais lenta. "none" desliga esse raciocínio interno
+        # (pode ser alterado no .env com GEMINI_REASONING_EFFORT=low/medium/high).
+        reasoning_effort = os.getenv("GEMINI_REASONING_EFFORT", "none").strip() or None
+        logger.info(f"Usando Google Gemini ({chosen_model}) via endpoint compatível com OpenAI, raciocínio: {reasoning_effort}")
         return LLM(
             model=f"openai/{chosen_model}",
             base_url=GEMINI_OPENAI_BASE_URL,
             api_key=api_key,
             temperature=0.3,
+            reasoning_effort=reasoning_effort,
         )
 
     if provider == "openai":

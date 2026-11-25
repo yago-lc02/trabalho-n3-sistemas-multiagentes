@@ -44,10 +44,39 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+def _erro_http(e: Exception, prefixo: str = "", provider: Optional[str] = None) -> HTTPException:
+    """Converte erros do LLM em respostas claras para o usuário."""
+    msg = str(e)
+    if (provider or "").lower() == "ollama":
+        base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+        modelo = os.getenv("OLLAMA_MODEL", "llama3.2")
+        # O Ollama é acessado pelo formato de API da OpenAI, por isso a biblioteca
+        # fala em "OpenAI API" quando não encontra o Ollama rodando.
+        if "connect" in msg.lower() or "connection" in msg.lower() or "refused" in msg.lower():
+            return HTTPException(
+                status_code=503,
+                detail=f"O Ollama não está rodando em {base_url}. Instale o Ollama (ollama.com), "
+                       f"execute 'ollama pull {modelo}' no terminal e tente novamente."
+            )
+        if "not found" in msg.lower() and "model" in msg.lower():
+            return HTTPException(
+                status_code=503,
+                detail=f"O modelo '{modelo}' não foi baixado no Ollama. "
+                       f"Execute 'ollama pull {modelo}' no terminal e tente novamente."
+            )
+    if "429" in msg or "RESOURCE_EXHAUSTED" in msg or "quota" in msg.lower() or "rate limit" in msg.lower():
+        return HTTPException(
+            status_code=429,
+            detail="Limite de requisições do Gemini atingido (o plano gratuito permite 5 por minuto). "
+                   "Aguarde cerca de 1 minuto e tente novamente."
+        )
+    return HTTPException(status_code=500, detail=f"{prefixo}{msg}")
+
 class StudyTextRequest(BaseModel):
     disciplina: str
     dias_ate_prova: int = 5
     horas_por_dia: float = 2.0
+    num_questoes: int = 5
     texto_material: str
     provider: Optional[str] = None
     model_name: Optional[str] = None
@@ -72,8 +101,7 @@ async def get_system_config():
         "available_modes": [
             {"id": "demo", "label": "Modo Demonstração Instantâneo (Garantia do Evento)", "ready": True},
             {"id": "ollama", "label": f"Ollama Local/Offline ({ollama_model})", "ready": True},
-            {"id": "gemini", "label": "Google Gemini (Nuvem)", "ready": has_gemini},
-            {"id": "openai", "label": "OpenAI (Nuvem)", "ready": has_openai}
+            {"id": "gemini", "label": "Google Gemini (Nuvem)", "ready": has_gemini}
         ]
     }
 
@@ -81,6 +109,39 @@ async def get_system_config():
 async def get_demo_data():
     """Retorna os dados demonstrativos pré-carregados para renderização imediata da interface."""
     return DEMO_DATA
+
+def _aquecer_ollama():
+    """Carrega o modelo na memória/placa de vídeo e faz uma geração mínima de aquecimento."""
+    import requests
+    base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434").rstrip("/")
+    modelo = os.getenv("OLLAMA_MODEL", "llama3.2")
+    try:
+        requests.post(
+            f"{base_url}/api/generate",
+            json={
+                "model": modelo,
+                "prompt": "ok",
+                "stream": False,
+                # Mantém o modelo carregado por 30 min (o padrão do Ollama é 5 min)
+                "keep_alive": os.getenv("OLLAMA_KEEP_ALIVE", "30m"),
+                "options": {"num_predict": 1},
+            },
+            timeout=300,
+        )
+        logger.info(f"Modelo '{modelo}' do Ollama carregado e aquecido.")
+    except Exception as e:
+        logger.warning(f"Não foi possível pré-carregar o modelo do Ollama: {e}")
+
+
+@app.post("/api/ollama/aquecer")
+async def aquecer_ollama(background_tasks: BackgroundTasks):
+    """
+    Chamado pelo front quando o usuário escolhe o modo Ollama: o modelo começa a
+    carregar enquanto o formulário é preenchido, em vez de só na hora de processar.
+    """
+    background_tasks.add_task(_aquecer_ollama)
+    return {"status": "carregando"}
+
 
 @app.post("/api/processar-texto")
 async def processar_texto(payload: StudyTextRequest):
@@ -96,19 +157,21 @@ async def processar_texto(payload: StudyTextRequest):
             disciplina=payload.disciplina,
             dias_ate_prova=payload.dias_ate_prova,
             horas_por_dia=payload.horas_por_dia,
+            num_questoes=payload.num_questoes,
             provider=provider,
             model_name=model
         )
         return resultado
     except Exception as e:
         logger.error(f"Erro ao processar texto com CrewAI: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise _erro_http(e, provider=payload.provider or os.getenv("LLM_PROVIDER", "demo"))
 
 @app.post("/api/processar-pdf")
 async def processar_pdf(
     disciplina: str = Form(...),
     dias_ate_prova: int = Form(5),
     horas_por_dia: float = Form(2.0),
+    num_questoes: int = Form(5),
     provider: Optional[str] = Form(None),
     model_name: Optional[str] = Form(None),
     arquivo: UploadFile = File(...)
@@ -130,6 +193,7 @@ async def processar_pdf(
             disciplina=disciplina,
             dias_ate_prova=dias_ate_prova,
             horas_por_dia=horas_por_dia,
+            num_questoes=num_questoes,
             provider=chosen_provider,
             model_name=model_name
         )
@@ -138,7 +202,7 @@ async def processar_pdf(
         raise
     except Exception as e:
         logger.error(f"Erro ao processar PDF: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Erro interno ao processar material: {str(e)}")
+        raise _erro_http(e, "Erro interno ao processar material: ", provider or os.getenv("LLM_PROVIDER", "demo"))
 
 # Monta diretório estático do frontend
 static_path = os.path.join(os.path.dirname(__file__), "static")
