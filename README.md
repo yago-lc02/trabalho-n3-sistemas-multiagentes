@@ -91,7 +91,9 @@ O script configurará o ambiente virtual, as dependências e abrirá a aplicaç�
    LLM_PROVIDER=demo
 
    # Se for utilizar APIs em Nuvem no evento (caso haja internet estável):
-   GEMINI_API_KEY=sua_chave_gemini_aqui
+   # Uma chave ou várias separadas por vírgula: se a cota de uma acabar,
+   # o sistema passa para a próxima (cada chave de um projeto diferente do Google)
+   GEMINI_API_KEY=sua_chave_gemini_aqui, outra_chave_opcional
    OPENAI_API_KEY=sua_chave_openai_aqui
    GEMINI_MODEL_NAME=gemini-1.5-flash
    OPENAI_MODEL_NAME=gpt-4o-mini
