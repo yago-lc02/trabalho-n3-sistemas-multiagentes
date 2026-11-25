@@ -20,7 +20,8 @@ from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel
 
 from backend.services.pdf_extractor import extract_text_from_pdf
-from backend.services.crew_orchestrator import run_study_crew
+from backend.services.crew_orchestrator import run_study_crew, CotaEsgotadaError
+from backend.services.llm_factory import get_gemini_keys, erro_de_cota_diaria
 from backend.services.demo_data import DEMO_DATA
 
 # Carrega backend/.env pelo caminho absoluto (independe do diretório de execução)
@@ -47,6 +48,14 @@ app.add_middleware(
 def _erro_http(e: Exception, prefixo: str = "", provider: Optional[str] = None) -> HTTPException:
     """Converte erros do LLM em respostas claras para o usuário."""
     msg = str(e)
+    if isinstance(e, CotaEsgotadaError):
+        return HTTPException(status_code=429, detail=msg)
+    if erro_de_cota_diaria(msg):
+        return HTTPException(
+            status_code=429,
+            detail="A cota diária gratuita do Gemini acabou. Ela é renovada por volta das 5h (horário de Brasília). "
+                   "Enquanto isso, use o modo Ollama ou o modo Demonstração, ou adicione outra chave no .env."
+        )
     if (provider or "").lower() == "ollama":
         base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
         modelo = os.getenv("OLLAMA_MODEL", "llama3.2")
@@ -86,7 +95,7 @@ async def get_system_config():
     """Retorna o estado da configuração de LLMs (nuvem vs local vs demo) para a barra superior."""
     env_provider = os.getenv("LLM_PROVIDER", "demo").lower()
     has_openai = bool(os.getenv("OPENAI_API_KEY"))
-    has_gemini = bool(os.getenv("GEMINI_API_KEY"))
+    has_gemini = bool(get_gemini_keys())
     ollama_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
     ollama_model = os.getenv("OLLAMA_MODEL", "llama3.2")
     

@@ -7,13 +7,26 @@ import threading
 from concurrent.futures import ThreadPoolExecutor
 from typing import Dict, Any, Callable, Optional
 from backend.services.demo_data import DEMO_DATA
-from backend.services.llm_factory import get_llm_instance
+from backend.services.llm_factory import (
+    get_llm_instance,
+    get_gemini_keys,
+    erro_de_cota,
+    erro_de_cota_diaria,
+    erro_de_chave_invalida,
+)
 
 logger = logging.getLogger(__name__)
 
 # Processa um material por vez: evita que execuções simultâneas estourem o
 # limite de requisições por minuto do plano gratuito do Gemini.
 _crew_lock = threading.Lock()
+
+# Posição da chave do Gemini em uso (quando há várias no .env)
+_indice_chave = 0
+
+
+class CotaEsgotadaError(ValueError):
+    """Todas as chaves do Gemini ficaram sem cota diária."""
 
 # Regra extra para os agentes: símbolos em LaTeX (\forall, \in...) quebram o JSON
 REGRA_JSON = (
@@ -147,9 +160,19 @@ def run_study_crew(
         result["simulado"] = simulado_demo
         return result
 
-    # Configura LLM real para CrewAI
-    llm = get_llm_instance(provider=provider, model_name=model_name)
-    
+    # Configura LLM real para CrewAI.
+    # No Gemini, pode haver várias chaves: começa pela última que funcionou.
+    global _indice_chave
+    usa_rotacao = provider.lower() == "gemini"
+    chaves = get_gemini_keys() if usa_rotacao else []
+    if usa_rotacao and not chaves:
+        raise ValueError("GEMINI_API_KEY não configurada no arquivo .env.")
+    rotacao = {"idx": (_indice_chave % len(chaves)) if chaves else 0, "esgotadas": set(), "erro_diario": False}
+    llm = get_llm_instance(provider=provider, model_name=model_name,
+                           api_key=chaves[rotacao["idx"]] if chaves else None)
+    rotacao["llm"] = llm
+    rotacao_lock = threading.Lock()
+
     from crewai import Agent, Task, Crew, Process
 
     # Notificação do Agente 1
@@ -288,18 +311,57 @@ def run_study_crew(
             verbose=True
         )
 
+    def rodar(agente, tarefa):
+        """
+        Executa a etapa de um agente. No Gemini, se a cota da chave atual acabar
+        (ou a chave for inválida), troca para a próxima chave e refaz só esta etapa.
+        """
+        while True:
+            with rotacao_lock:
+                idx = rotacao["idx"]
+                agente.llm = rotacao["llm"]
+            try:
+                return nova_crew(agente, tarefa).kickoff()
+            except Exception as e:
+                msg = str(e)
+                if not usa_rotacao or not (erro_de_cota(msg) or erro_de_chave_invalida(msg)):
+                    raise
+                with rotacao_lock:
+                    rotacao["esgotadas"].add(idx)
+                    rotacao["erro_diario"] = rotacao["erro_diario"] or erro_de_cota_diaria(msg)
+                    if rotacao["idx"] != idx:
+                        continue  # a outra etapa em paralelo já trocou de chave
+                    livres = [i for i in range(len(chaves)) if i not in rotacao["esgotadas"]]
+                    if not livres:
+                        if rotacao["erro_diario"]:
+                            raise CotaEsgotadaError(
+                                f"A cota diária do Gemini acabou em todas as chaves configuradas ({len(chaves)}). "
+                                "Ela é renovada por volta das 5h (horário de Brasília). "
+                                "Enquanto isso, use o modo Ollama ou o modo Demonstração."
+                            ) from e
+                        raise
+                    logger.warning(
+                        f"Chave {idx + 1} do Gemini sem cota ou inválida; trocando para a chave {livres[0] + 1}."
+                    )
+                    rotacao["idx"] = livres[0]
+                    rotacao["llm"] = get_llm_instance(provider=provider, model_name=model_name,
+                                                      api_key=chaves[livres[0]])
+
     with _crew_lock:
         # Etapa 1: Sintetizador gera o resumo
-        nova_crew(agente_sintetizador, tarefa_sintese).kickoff()
+        rodar(agente_sintetizador, tarefa_sintese)
 
         # Etapa 2: Banca (simulado) e Tutor (cronograma) em paralelo
         with ThreadPoolExecutor(max_workers=2) as executor:
             futuros = [
-                executor.submit(nova_crew(agente_banca, tarefa_simulado).kickoff),
-                executor.submit(nova_crew(agente_tutor, tarefa_cronograma).kickoff),
+                executor.submit(rodar, agente_banca, tarefa_simulado),
+                executor.submit(rodar, agente_tutor, tarefa_cronograma),
             ]
             for futuro in futuros:
                 futuro.result()
+
+        # Guarda a chave que funcionou para começar por ela na próxima vez
+        _indice_chave = rotacao["idx"]
 
     # Consolidamos o JSON de cada uma das 3 tarefas individualmente.
     # O LLM às vezes omite a chave raiz ('resumo', 'simulado', 'cronograma'):
