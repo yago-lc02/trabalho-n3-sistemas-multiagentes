@@ -3,6 +3,7 @@ import logging
 import os
 import random
 import re
+import time
 import threading
 from concurrent.futures import ThreadPoolExecutor
 from typing import Dict, Any, Callable, Optional
@@ -167,7 +168,8 @@ def run_study_crew(
     chaves = get_gemini_keys() if usa_rotacao else []
     if usa_rotacao and not chaves:
         raise ValueError("GEMINI_API_KEY não configurada no arquivo .env.")
-    rotacao = {"idx": (_indice_chave % len(chaves)) if chaves else 0, "esgotadas": set(), "erro_diario": False}
+    # motivos: posição da chave -> por que ela falhou nesta execução ("diaria", "minuto" ou "invalida")
+    rotacao = {"idx": (_indice_chave % len(chaves)) if chaves else 0, "motivos": {}, "esperas": 0}
     llm = get_llm_instance(provider=provider, model_name=model_name,
                            api_key=chaves[rotacao["idx"]] if chaves else None)
     rotacao["llm"] = llm
@@ -311,10 +313,51 @@ def run_study_crew(
             verbose=True
         )
 
+    modelo_gemini = model_name or os.getenv("GEMINI_MODEL_NAME", "gemini-2.5-flash")
+    descricao_motivo = {
+        "diaria": "cota diária esgotada",
+        "minuto": "limite de requisições por minuto atingido",
+        "invalida": f"chave inválida ou sem acesso ao modelo {modelo_gemini}",
+    }
+
+    def motivo_do_erro(msg: str) -> Optional[str]:
+        if erro_de_cota_diaria(msg):
+            return "diaria"
+        if erro_de_cota(msg):
+            return "minuto"
+        if erro_de_chave_invalida(msg):
+            return "invalida"
+        return None
+
+    def mensagem_sem_chaves(motivos: Dict[int, str]) -> str:
+        if all(m == "diaria" for m in motivos.values()):
+            return (
+                f"A cota diária do Gemini acabou em todas as chaves configuradas ({len(chaves)}). "
+                "Ela é renovada por volta das 5h (horário de Brasília). "
+                "Enquanto isso, use o modo Ollama ou o modo Demonstração."
+            )
+        if all(m == "minuto" for m in motivos.values()):
+            return (
+                "O Gemini atingiu o limite de requisições por minuto do plano gratuito. "
+                "Aguarde cerca de 1 minuto e tente novamente."
+            )
+        detalhes = "; ".join(f"chave {i + 1}: {descricao_motivo[m]}" for i, m in sorted(motivos.items()))
+        return (
+            f"Nenhuma chave do Gemini pôde ser usada agora ({detalhes}). "
+            "Confira as chaves no arquivo backend/.env ou use o modo Ollama ou o modo Demonstração."
+        )
+
+    def segundos_de_espera(msg: str) -> int:
+        """O Google informa em quanto tempo o limite por minuto libera (retryDelay)."""
+        achado = re.search(r"retryDelay['\"]?\s*:\s*['\"](\d+)s", msg)
+        segundos = int(achado.group(1)) if achado else 60
+        return min(max(segundos, 5), 90) + 2
+
     def rodar(agente, tarefa):
         """
-        Executa a etapa de um agente. No Gemini, se a cota da chave atual acabar
-        (ou a chave for inválida), troca para a próxima chave e refaz só esta etapa.
+        Executa a etapa de um agente. No Gemini, se a chave atual falhar por cota
+        ou por ser inválida, troca para a próxima chave e refaz só esta etapa.
+        Se só restarem chaves no limite por minuto, espera liberar e tenta de novo.
         """
         while True:
             with rotacao_lock:
@@ -324,28 +367,34 @@ def run_study_crew(
                 return nova_crew(agente, tarefa).kickoff()
             except Exception as e:
                 msg = str(e)
-                if not usa_rotacao or not (erro_de_cota(msg) or erro_de_chave_invalida(msg)):
+                motivo = motivo_do_erro(msg) if usa_rotacao else None
+                if motivo is None:
                     raise
+                espera = 0
                 with rotacao_lock:
-                    rotacao["esgotadas"].add(idx)
-                    rotacao["erro_diario"] = rotacao["erro_diario"] or erro_de_cota_diaria(msg)
+                    rotacao["motivos"][idx] = motivo
+                    logger.warning(f"Chave {idx + 1} do Gemini falhou: {descricao_motivo[motivo]}.")
                     if rotacao["idx"] != idx:
                         continue  # a outra etapa em paralelo já trocou de chave
-                    livres = [i for i in range(len(chaves)) if i not in rotacao["esgotadas"]]
+                    livres = [i for i in range(len(chaves)) if i not in rotacao["motivos"]]
                     if not livres:
-                        if rotacao["erro_diario"]:
-                            raise CotaEsgotadaError(
-                                f"A cota diária do Gemini acabou em todas as chaves configuradas ({len(chaves)}). "
-                                "Ela é renovada por volta das 5h (horário de Brasília). "
-                                "Enquanto isso, use o modo Ollama ou o modo Demonstração."
-                            ) from e
-                        raise
-                    logger.warning(
-                        f"Chave {idx + 1} do Gemini sem cota ou inválida; trocando para a chave {livres[0] + 1}."
-                    )
+                        # O limite por minuto libera em segundos: espera e tenta de novo
+                        no_limite_minuto = [i for i, m in rotacao["motivos"].items() if m == "minuto"]
+                        if not no_limite_minuto or rotacao["esperas"] >= 2:
+                            raise CotaEsgotadaError(mensagem_sem_chaves(rotacao["motivos"])) from e
+                        rotacao["esperas"] += 1
+                        for i in no_limite_minuto:
+                            del rotacao["motivos"][i]
+                        livres = [no_limite_minuto[0]]
+                        espera = segundos_de_espera(msg)
+                    if livres[0] != idx:
+                        logger.warning(f"Trocando para a chave {livres[0] + 1} do Gemini.")
+                        rotacao["llm"] = get_llm_instance(provider=provider, model_name=model_name,
+                                                          api_key=chaves[livres[0]])
                     rotacao["idx"] = livres[0]
-                    rotacao["llm"] = get_llm_instance(provider=provider, model_name=model_name,
-                                                      api_key=chaves[livres[0]])
+                if espera:
+                    logger.warning(f"Limite por minuto do Gemini: aguardando {espera} s para tentar de novo.")
+                    time.sleep(espera)
 
     with _crew_lock:
         # Etapa 1: Sintetizador gera o resumo
